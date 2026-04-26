@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Build binaries
+        run: |
+          go build -trimpath -o /tmp/govatars-server ./cmd/server
+          go build -trimpath -o /tmp/govatars-worker ./cmd/worker
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Unit tests and coverage
+        run: |
+          set -euo pipefail
+          pkgs="$(go list ./... | grep -v '/internal/mocks$')"
+          go test -race -count=1 ${pkgs} -coverprofile=coverage-unit.out -covermode=atomic
+          echo "---- unit cover (summary) ----"
+          go tool cover -func=coverage-unit.out | tail -15
+
+      - name: Upload unit test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: coverage-unit.out
+          if-no-files-found: error
+
+  integration:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Integration tests and integration-only coverage
+        run: |
+          set -euo pipefail
+          pkgs="$(go list ./... | grep -v '/internal/mocks$')"
+          go test -tags=integration -p 1 -race -count=1 -timeout=25m ${pkgs} \
+            -coverprofile=coverage-integration.out -covermode=atomic
+          echo "---- integration-only cover (summary) ----"
+          go tool cover -func=coverage-integration.out | tail -15
+
+      - name: Upload integration-only coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-integration
+          path: coverage-integration.out
+          if-no-files-found: error
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+          args: --timeout=5m

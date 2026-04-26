@@ -1,67 +1,80 @@
-# Шаблонный репозиторий для сервиса "Аватарница"
+# Govatars (GophProfile)
 
-Это шаблонный репозиторий для выпускной работы по курсу "Go-разработчик". Он содержит базовую структуру проекта, готовую к дальнейшей разработке, а также техническое задание и пример веб-интерфейса.
+Go module: `**govatars**`.
 
-## Описание
+**Govatars** is a Go microservice for managing user avatars: upload once, store processed images, and serve them over HTTP. Third-party apps can resolve an avatar by user identifier; if none exists, a default placeholder may be returned (planned for later milestones).
 
-Проект "Аватарница" — это микросервис для управления аватарками пользователей. Он предоставляет REST API для загрузки, получения и удаления изображений, а также простой веб-интерфейс для взаимодействия с сервисом.
+This repository implements the **MVP** of the **GophProfile** course project: REST API, PostgreSQL metadata, S3-compatible object storage (MinIO), asynchronous image processing via **RabbitMQ**, and a bundled web UI (upload and gallery under `/web`).
 
-## Структура проекта
+## Features (target architecture)
 
-Проект имеет следующую структуру, основанную на лучших практиках разработки на Go:
+- **REST API** described in `[api/swagger.yaml](api/swagger.yaml)`, server types generated with **[oapi-codegen](https://github.com/oapi-codegen/oapi-codegen)** and served with **Echo**.
+- **Configuration** via **Viper**: YAML file, environment variables, and CLI flags (precedence: defaults → file → env → flags).
+- **Persistence**: PostgreSQL for metadata; **MinIO** (or AWS S3) for originals and thumbnails.
+- **Messaging**: RabbitMQ with a **retry** topology (multiple delay queues, DLX/DLQ, custom `X-Retry-Count` header for backoff routing).
+- **Worker** binary for thumbnail generation and asynchronous deletes.
+- **Testing**: `testify/suite`, **gomock** for interfaces, optional testcontainers for integration tests.
+- **SOLID**: dependency interfaces are declared **at the point of use** (e.g. each use case defines the small interfaces it needs); concrete implementations live under `internal/repository/...` and satisfy those interfaces implicitly.
+
+## Repository layout (planned)
 
 ```
-/
-├── cmd/                # Точки входа в приложение (main.go)
-│   ├── server/         # HTTP-сервер
-│   └── worker/         # Воркер для асинхронной обработки задач
-├── internal/           # Внутренняя логика приложения
-│   ├── api/            # Спецификации API (OpenAPI/Swagger)
-│   ├── config/         # Конфигурация приложения
-│   ├── domain/         # Основные доменные сущности
-│   ├── handlers/       # HTTP-обработчики
-│   ├── repository/     # Работа с хранилищем (БД, S3)
-│   ├── services/       # Бизнес-логика
-│   └── worker/         # Логика воркера
-├── pkg/                # Публичные библиотеки, которые можно использовать в других проектах
-├── web/                # Веб-интерфейс
-│   └── static/         # Статические файлы (HTML, CSS, JS)
-├── migrations/         # Миграции базы данных
-├── docker/             # Docker-файлы и конфигурации
-├── k8s/                # Манифесты Kubernetes
-├── tests/              # Интеграционные и e2e тесты
-├── docs/               # Документация проекта
-└── .gitignore          # Файл для исключения файлов из Git
+cmd/
+  server/          # HTTP API entrypoint
+  worker/          # Background consumer
+api/
+  swagger.yaml     # OpenAPI spec (source for codegen)
+internal/
+  models/          # Domain and application models
+  usecase/         # Business logic; defines interfaces it depends on
+  repository/
+    postgres/
+    s3/
+    rabbitmq/
+  delivery/http/   # Echo handlers; server.gen.go / models.gen.go from oapi-codegen
+  pkg/config/      # Viper-based loading (YAML + GOVATARS_* env + flags)
+config/
+  config.yaml      # Example local config (ports match docker-compose.deps.yml)
+web/static/        # HTML/CSS assets served by the API at `/web` (Echo static + form routes)
+migrations/        # SQL migrations
 ```
 
-## Как начать работу
+## API specification
 
-1.  **Клонируйте репозиторий:**
-    ```bash
-    git clone <URL этого репозитория>
-    cd go-avatar-service-template
-    ```
+The HTTP contract is the single source of truth: `**[api/swagger.yaml](api/swagger.yaml)**`.
 
-2.  **Инициализируйте свой репозиторий на GitHub:**
-    Следуйте инструкциям GitHub для создания нового репозитория и свяжите его с этим локальным репозиторием.
+After changing the spec, regenerate code (from `internal/delivery/http` or project root, depending on `go:generate` directives):
 
-3.  **Установите зависимости:**
-    ```bash
-    go mod tidy
-    ```
+```bash
+go generate ./...
+```
 
-4.  **Настройте окружение:**
-    Создайте файл `.env` на основе `.env.example` (необходимо будет его создать) и укажите необходимые переменные окружения (данные для подключения к БД, S3 и т.д.).
+## Requirements
 
-5.  **Запустите сервисы с помощью Docker Compose:**
-    ```bash
-    docker-compose up --build
-    ```
+- Go 1.26+ (see `go.mod` for the exact toolchain)
+- PostgreSQL, RabbitMQ, and S3-compatible storage (e.g. MinIO) for full local runs
 
-После этого сервис будет доступен по адресу `http://localhost:8080`.
+## Configuration
 
-## Веб-интерфейс
+- Default file: `config/config.yaml`. Override path with `--config` / `-c`.
+- Environment: prefix `**GOVATARS_**`, nested keys use `_` (e.g. `GOVATARS_POSTGRES_DSN`, `GOVATARS_HTTP_ADDRESS`).
+- **Postgres**: set `postgres.dsn`, or omit `dsn` and set `postgres.host`, `postgres.user`, `postgres.database` (and optional `port`, `password`, `sslmode`) to build a URL.
 
-Простой одностраничный веб-интерфейс для загрузки аватарок доступен по адресу `http://localhost:8080/`. Он находится в файле `web/static/index.html`.
+## Logging
 
-**Важно:** Этот интерфейс предоставлен для облегчения старта и демонстрации работы API. Вы можете изменять его, адаптировать под свои нужды или полностью заменить на свой собственный фронтенд.
+- `**internal/pkg/logging.New()**` returns a `***slog.Logger**` (JSON to stderr). `**cmd/server**` and `**cmd/worker**` create it once and pass it where needed (worker `**NewProcessor` / `NewApp**`, server `**main**` and panic handler). There is **no** `slog.SetDefault` — dependencies stay explicit.
+- **HTTP access logs**: Echo `RequestID` (`X-Request-ID`), then `internal/pkg/middleware` attaches request metadata to `context` and logs one JSON line per request (`request_id`, `host`, `remote_ip`, `method`, `path`, `status`, `latency`, `user_id` from `X-User-ID` — empty string when the header is absent, etc.).
+- Set `**LOG_LEVEL`** to `debug`, `info`, `warn`, or `error` to tune slog verbosity (default `**info`**).
+
+## Development
+
+1. Start dependencies: `make deps-up` (see `[docker-compose.deps.yml](docker-compose.deps.yml)`).
+2. Apply migrations: `make migrate-up` (runs `[golang-migrate](https://github.com/golang-migrate/migrate)` via `go run -tags postgres …@version`; the CLI must be built with the `postgres` tag so the driver is linked — same idea as `go install -tags postgres …` to `GOPATH/bin`. It is not listed under `tool` in `[go.mod](go.mod)`: `go tool migrate` does not apply build tags, and adding the binary as a `tool` pulls a very large indirect dependency graph).
+3. Run API from the repository root (`api/swagger.yaml` is read at startup): `make run-server` or `go run ./cmd/server`.
+4. Run the worker (thumbnail + S3 cleanup consumers): `make run-worker`.
+
+Other **Makefile** targets: `build`, `test`, `install-lint` (installs **golangci-lint** into `**$(go env GOPATH)/bin`**), `lint` (runs that binary by full path — **no `PATH` setup required**), `generate` (OpenAPI codegen), `deps-down`, `migrate-down`.
+
+## License
+
+See [LICENSE](LICENSE).

@@ -1,0 +1,59 @@
+# Local development (see docker-compose.deps.yml for ports).
+logging:
+  level: info
+
+http:
+  address: "0.0.0.0:8080"
+  public_base_url: "http://localhost:8080"
+  placeholder_path: "web/static/placeholder.png"
+  static_dir: "web/static"
+  cors_allow_origins:
+    - "*"
+  rate_limit:
+    requests_per_second: 50
+    burst: 100
+
+postgres:
+  dsn: "postgres://govatars:govatars@localhost:5433/govatars?sslmode=disable"
+  pool_max_conns: 4
+  pool_min_conns: 0
+  pool_max_conn_lifetime: "1h"
+  pool_max_conn_idle_time: "30m"
+  pool_health_check_period: "1m"
+  pool_max_conn_lifetime_jitter: "0s"
+
+avatars:
+  max_upload_bytes: 10485760
+  image_cache_control: "max-age=86400"
+  thumbnails:
+    - { label: "64x64", pixels: 64 }
+    - { label: "128x128", pixels: 128 }
+    - { label: "256x256", pixels: 256 }
+    - { label: "512x512", pixels: 512 }
+    - { label: "100x100", pixels: 100 }
+    - { label: "300x300", pixels: 300 }
+
+s3:
+  endpoint: "localhost:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "avatars"
+  use_ssl: false
+  region: "us-east-1"
+
+rabbitmq:
+  url: "amqp://guest:guest@localhost:5673/"
+  upload_consumer_tag: "govatars-upload"
+  delete_consumer_tag: "govatars-delete"
+  consumer_handle_timeout: "3m"
+  exchange: "avatars"
+  upload_routing_key: "avatar.uploaded"
+  delete_routing_key: "avatar.deleted"
+  upload_queue: "avatars.upload"
+  delete_queue: "avatars.delete"
+  upload_dlq_queue: "avatars.upload.dlq"
+  upload_dlq_routing_key: "avatar.upload.failed"
+  delete_dlq_queue: "avatars.delete.dlq"
+  delete_dlq_routing_key: "avatar.delete.failed"
+  upload_retry_delays_ms: [1000, 5000, 15000]
+  delete_retry_delays_ms: [1000, 5000, 15000]

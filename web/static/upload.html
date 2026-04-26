@@ -66,6 +66,19 @@
           </button>
         </form>
 
+        <section class="border-t border-white/20 pt-6 mt-6">
+          <h2 class="text-lg font-semibold text-white mb-3">Classic form (POST /web/upload)</h2>
+          <form method="post" action="/web/upload" enctype="multipart/form-data" class="space-y-3">
+            <input name="user_id" required placeholder="User ID"
+              class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50" />
+            <input type="file" name="file" required accept="image/*"
+              class="w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:bg-purple-600 file:text-white" />
+            <button type="submit" class="w-full bg-purple-700 hover:bg-purple-600 text-white font-semibold py-2 rounded-lg">
+              Upload via form post
+            </button>
+          </form>
+        </section>
+
         <div id="responseContainer" class="hidden">
           <div class="border-t border-white/20 pt-6">
             <h2 class="text-xl font-semibold text-white mb-4">API Response</h2>
