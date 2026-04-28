@@ -1,0 +1,128 @@
+name: govatars
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-govatars}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-govatars}
+      POSTGRES_DB: ${POSTGRES_DB:-govatars}
+    ports:
+      - "${POSTGRES_PUBLISHED_PORT:-5433}:5432"
+    volumes:
+      - govatars_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-govatars} -d ${POSTGRES_DB:-govatars}"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PUBLISHED_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PUBLISHED_PORT:-9001}:9001"
+    volumes:
+      - govatars_minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:${MINIO_INTERNAL_API_PORT:-9000}/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  rabbitmq:
+    image: ${RABBITMQ_IMAGE:-rabbitmq:3.13-management-alpine}
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-govatars}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-govatars}
+    ports:
+      - "${RABBITMQ_AMQP_PUBLISHED_PORT:-5673}:5672"
+      - "${RABBITMQ_MANAGEMENT_PUBLISHED_PORT:-15673}:15672"
+    volumes:
+      - govatars_rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  migrate:
+    image: ${MIGRATE_IMAGE:-migrate/migrate:v4.19.0}
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://${POSTGRES_USER:-govatars}:${POSTGRES_PASSWORD:-govatars}@postgres:5432/${POSTGRES_DB:-govatars}?sslmode=disable"
+      - "up"
+    volumes:
+      - ./migrations:/migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    command: ["./server"]
+    ports:
+      - "${HTTP_PUBLISHED_PORT:-8080}:8080"
+    environment:
+      GOVATARS_POSTGRES_DSN: "postgres://${POSTGRES_USER:-govatars}:${POSTGRES_PASSWORD:-govatars}@postgres:5432/${POSTGRES_DB:-govatars}?sslmode=disable"
+      GOVATARS_RABBITMQ_URL: "amqp://${RABBITMQ_USER:-govatars}:${RABBITMQ_PASSWORD:-govatars}@rabbitmq:5672/"
+      GOVATARS_HTTP_PUBLIC_BASE_URL: "http://localhost:${HTTP_PUBLISHED_PORT:-8080}"
+      GOVATARS_S3_ENDPOINT: "minio:9000"
+      GOVATARS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      GOVATARS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    command: ["./worker"]
+    environment:
+      GOVATARS_POSTGRES_DSN: "postgres://${POSTGRES_USER:-govatars}:${POSTGRES_PASSWORD:-govatars}@postgres:5432/${POSTGRES_DB:-govatars}?sslmode=disable"
+      GOVATARS_RABBITMQ_URL: "amqp://${RABBITMQ_USER:-govatars}:${RABBITMQ_PASSWORD:-govatars}@rabbitmq:5672/"
+      GOVATARS_S3_ENDPOINT: "minio:9000"
+      GOVATARS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      GOVATARS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - ./config/config.yaml:/app/config/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  govatars_pg:
+  govatars_minio:
+  govatars_rabbit:

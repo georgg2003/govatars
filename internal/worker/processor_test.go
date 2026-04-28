@@ -52,7 +52,7 @@ func (s *ProcessorSuite) TestHandleUploadDelivery_ProcessSuccess() {
 	key := "originals/u/" + id.String() + ".png"
 	a := &models.Avatar{
 		ID: id, UserID: "u", S3Key: key, MimeType: "image/png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByIDIncludingDeleted(gomock.Any(), id).Return(a, nil)
@@ -72,7 +72,7 @@ func (s *ProcessorSuite) TestHandleUploadDelivery_RepublishOnFailure() {
 	key := "originals/u/" + id.String() + ".png"
 	a := &models.Avatar{
 		ID: id, UserID: "u", S3Key: key, MimeType: "image/png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByIDIncludingDeleted(gomock.Any(), id).Return(a, nil)
@@ -97,7 +97,7 @@ func (s *ProcessorSuite) TestHandleUploadDelivery_DLQAfterRetries() {
 	key := "originals/u/" + id.String() + ".png"
 	a := &models.Avatar{
 		ID: id, UserID: "u", S3Key: key, MimeType: "image/png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByIDIncludingDeleted(gomock.Any(), id).Return(a, nil)

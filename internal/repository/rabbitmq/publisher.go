@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 
@@ -14,7 +15,10 @@ import (
 )
 
 // Publisher sends JSON messages to a direct exchange.
+//
+// A single [amqp.Channel] is not goroutine-safe; all channel operations are serialized with mu.
 type Publisher struct {
+	mu   sync.Mutex
 	conn *amqp.Connection
 	ch   *amqp.Channel
 	cfg  config.RabbitMQ
@@ -54,6 +58,8 @@ func NewPublisher(ctx context.Context, log *slog.Logger, cfg config.RabbitMQ) (*
 
 // Close releases the channel and connection.
 func (p *Publisher) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.ch != nil {
 		if err := p.ch.Close(); err != nil {
 			p.log.WarnContext(context.Background(), "rabbitmq channel close", "err", err)
@@ -70,6 +76,8 @@ func (p *Publisher) Health(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.conn == nil || p.conn.IsClosed() {
 		return errors.New("rabbitmq: connection closed")
 	}
@@ -103,6 +111,8 @@ func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageI
 	if messageID != "" {
 		pub.MessageId = messageID
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	return p.ch.PublishWithContext(ctx, p.cfg.Exchange, routingKey, false, false, pub)
 }
 

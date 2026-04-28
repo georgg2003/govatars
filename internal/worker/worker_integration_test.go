@@ -225,7 +225,7 @@ func (s *WorkerAppSuite) TestAppRun_ProcessesUpload() {
 	a := &models.Avatar{
 		ID: id, UserID: user, FileName: "a.png", MimeType: "image/png",
 		SizeBytes: int64(len(minPNG)), S3Key: key,
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))
@@ -275,7 +275,7 @@ func (s *WorkerAppSuite) TestAppRun_DLQAfterRetries() {
 	a := &models.Avatar{
 		ID: id, UserID: user, FileName: "x.png", MimeType: "image/png",
 		SizeBytes: 0, S3Key: missingKey,
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))

@@ -31,10 +31,13 @@ run-server:
 run-worker:
 	$(GO) run ./cmd/worker
 
-deps-up:
-	docker compose up -d
+make dbuild:
+	docker compose build
 
-deps-down:
+up:
+	docker compose --env-file .env.local up
+
+down:
 	docker compose down
 
 migrate-up:

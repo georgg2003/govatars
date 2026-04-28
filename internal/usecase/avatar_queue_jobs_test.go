@@ -37,7 +37,7 @@ func (s *AvatarQueueJobsSuite) TestProcessAvatarUpload_Success() {
 	key := "originals/u/" + id.String() + ".png"
 	a := &models.Avatar{
 		ID: id, UserID: "u", S3Key: key, MimeType: "image/png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusPending,
+		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByIDIncludingDeleted(gomock.Any(), id).Return(a, nil)

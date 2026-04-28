@@ -1,4 +1,3 @@
-# Local development (see docker-compose.deps.yml for ports).
 logging:
   level: info
 

@@ -99,6 +99,7 @@ func Run(ctx context.Context, application *serverapp.App) error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
+		logger.InfoContext(shutdownCtx, "shutting down http server")
 		if err := e.Shutdown(shutdownCtx); err != nil {
 			logger.WarnContext(shutdownCtx, "echo shutdown", "err", err)
 			if err := e.Close(); err != nil {

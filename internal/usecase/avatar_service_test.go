@@ -97,7 +97,7 @@ func (s *AvatarServiceSuite) TestGetImage_OK() {
 	id := uuid.New()
 	a := &models.Avatar{
 		ID: id, UserID: "u", MimeType: "image/png", S3Key: "originals/u/x.png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusCompleted,
+		ProcessingStatus: models.ProcessingStatusCompleted,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByID(gomock.Any(), id).Return(a, nil)
@@ -121,7 +121,7 @@ func (s *AvatarServiceSuite) TestGetImage_NoTranscode_FallsBackOnS3Error() {
 	id := uuid.New()
 	a := &models.Avatar{
 		ID: id, UserID: "u", MimeType: "image/png", S3Key: "originals/u/x.png",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusCompleted,
+		ProcessingStatus: models.ProcessingStatusCompleted,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByID(gomock.Any(), id).Return(a, nil)
@@ -153,7 +153,7 @@ func (s *AvatarServiceSuite) TestDeleteByID_Forbidden() {
 func (s *AvatarServiceSuite) TestDeleteByID_OK() {
 	id := uuid.New()
 	a := &models.Avatar{
-		ID: id, UserID: "me", S3Key: "k", UploadStatus: models.UploadStatusReady,
+		ID: id, UserID: "me", S3Key: "k",
 		ProcessingStatus: models.ProcessingStatusCompleted, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByID(gomock.Any(), id).Return(a, nil)
@@ -166,7 +166,7 @@ func (s *AvatarServiceSuite) TestDeleteByID_OK() {
 func (s *AvatarServiceSuite) TestDeleteByID_PublishFails_RollbackOK() {
 	id := uuid.New()
 	a := &models.Avatar{
-		ID: id, UserID: "me", S3Key: "k", UploadStatus: models.UploadStatusReady,
+		ID: id, UserID: "me", S3Key: "k",
 		ProcessingStatus: models.ProcessingStatusCompleted, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	pubErr := errors.New("mq down")
@@ -182,7 +182,7 @@ func (s *AvatarServiceSuite) TestDeleteByID_PublishFails_RollbackOK() {
 func (s *AvatarServiceSuite) TestDeleteByID_PublishFails_RollbackFails() {
 	id := uuid.New()
 	a := &models.Avatar{
-		ID: id, UserID: "me", S3Key: "k", UploadStatus: models.UploadStatusReady,
+		ID: id, UserID: "me", S3Key: "k",
 		ProcessingStatus: models.ProcessingStatusCompleted, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	pubErr := errors.New("mq down")
@@ -201,7 +201,7 @@ func (s *AvatarServiceSuite) TestDeleteByID_PublishFails_RollbackFails() {
 func (s *AvatarServiceSuite) TestDeleteLatestForUser_PublishFails_RollbackOK() {
 	id := uuid.New()
 	a := &models.Avatar{
-		ID: id, UserID: "me", S3Key: "k", UploadStatus: models.UploadStatusReady,
+		ID: id, UserID: "me", S3Key: "k",
 		ProcessingStatus: models.ProcessingStatusCompleted, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	pubErr := errors.New("mq down")
@@ -243,7 +243,7 @@ func (s *AvatarServiceSuite) TestGetImage_UsesThumbnailKey() {
 	a := &models.Avatar{
 		ID: id, UserID: "u", MimeType: "image/png", S3Key: "originals/u/x.png",
 		ThumbnailS3Keys: map[string]map[string]string{"100x100": {models.ThumbnailFormatJPEG: thumbKey}},
-		UploadStatus:    models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusCompleted,
+		ProcessingStatus: models.ProcessingStatusCompleted,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByID(gomock.Any(), id).Return(a, nil)
@@ -260,7 +260,7 @@ func (s *AvatarServiceSuite) TestGetImage_FormatJPEG() {
 	id := uuid.New()
 	a := &models.Avatar{
 		ID: id, MimeType: "image/png", S3Key: "k",
-		UploadStatus: models.UploadStatusReady, ProcessingStatus: models.ProcessingStatusCompleted,
+		ProcessingStatus: models.ProcessingStatusCompleted,
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	s.repo.EXPECT().GetByID(gomock.Any(), id).Return(a, nil)

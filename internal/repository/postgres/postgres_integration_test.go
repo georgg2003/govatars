@@ -78,7 +78,6 @@ func (s *PostgresRepoSuite) insertAvatar(userID string) *models.Avatar {
 		MimeType:         "image/png",
 		SizeBytes:        42,
 		S3Key:            "originals/" + userID + "/" + id.String() + ".png",
-		UploadStatus:     models.UploadStatusReady,
 		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt:        now,
 		UpdatedAt:        now,
@@ -211,6 +210,20 @@ func (s *PostgresRepoSuite) TestSetProcessingStatus() {
 	got, err := s.repo.GetByID(ctx, a.ID)
 	s.Require().NoError(err)
 	s.Equal(models.ProcessingStatusFailed, got.ProcessingStatus)
+}
+
+func (s *PostgresRepoSuite) TestSetProcessingStatus_NotFound_ReturnsErrNotFound() {
+	err := s.repo.SetProcessingStatus(context.Background(), uuid.New(), models.ProcessingStatusFailed)
+	s.Require().ErrorIs(err, usecase.ErrNotFound)
+}
+
+func (s *PostgresRepoSuite) TestSetProcessingStatus_DeletedRow_ReturnsErrNotFound() {
+	ctx := context.Background()
+	a := s.insertAvatar("integration-user-set-status-deleted")
+	s.Require().NoError(s.repo.SoftDelete(ctx, a.ID, a.UserID))
+
+	err := s.repo.SetProcessingStatus(ctx, a.ID, models.ProcessingStatusFailed)
+	s.Require().ErrorIs(err, usecase.ErrNotFound)
 }
 
 func (s *PostgresRepoSuite) TestPoolHealth() {

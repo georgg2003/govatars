@@ -38,10 +38,10 @@ func (r *AvatarRepository) Insert(ctx context.Context, a *models.Avatar) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO avatars (
 			id, user_id, file_name, mime_type, size_bytes, s3_key, thumbnail_s3_keys,
-			upload_status, processing_status
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			processing_status
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 	`, a.ID, a.UserID, a.FileName, a.MimeType, a.SizeBytes, a.S3Key, thumbs,
-		string(a.UploadStatus), string(a.ProcessingStatus))
+		string(a.ProcessingStatus))
 	return err
 }
 
@@ -61,7 +61,7 @@ func (r *AvatarRepository) DeleteHard(ctx context.Context, id uuid.UUID) error {
 func (r *AvatarRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.Avatar, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, file_name, mime_type, size_bytes, width, height, s3_key, thumbnail_s3_keys,
-		       upload_status, processing_status, created_at, updated_at, deleted_at
+		       processing_status, created_at, updated_at, deleted_at
 		FROM avatars WHERE id = $1 AND deleted_at IS NULL
 	`, id)
 	a, err := scanAvatarRow(row)
@@ -75,7 +75,7 @@ func (r *AvatarRepository) GetByID(ctx context.Context, id uuid.UUID) (*models.A
 func (r *AvatarRepository) GetByIDIncludingDeleted(ctx context.Context, id uuid.UUID) (*models.Avatar, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, file_name, mime_type, size_bytes, width, height, s3_key, thumbnail_s3_keys,
-		       upload_status, processing_status, created_at, updated_at, deleted_at
+		       processing_status, created_at, updated_at, deleted_at
 		FROM avatars WHERE id = $1
 	`, id)
 	return scanAvatarRow(row)
@@ -85,7 +85,7 @@ func (r *AvatarRepository) GetByIDIncludingDeleted(ctx context.Context, id uuid.
 func (r *AvatarRepository) ListByUser(ctx context.Context, userID string) ([]models.Avatar, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, file_name, mime_type, size_bytes, width, height, s3_key, thumbnail_s3_keys,
-		       upload_status, processing_status, created_at, updated_at, deleted_at
+		       processing_status, created_at, updated_at, deleted_at
 		FROM avatars WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 	`, userID)
@@ -109,7 +109,7 @@ func (r *AvatarRepository) ListByUser(ctx context.Context, userID string) ([]mod
 func (r *AvatarRepository) GetLatestByUser(ctx context.Context, userID string) (*models.Avatar, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, file_name, mime_type, size_bytes, width, height, s3_key, thumbnail_s3_keys,
-		       upload_status, processing_status, created_at, updated_at, deleted_at
+		       processing_status, created_at, updated_at, deleted_at
 		FROM avatars WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
 		LIMIT 1
@@ -173,10 +173,16 @@ func (r *AvatarRepository) UpdateProcessingResult(ctx context.Context, id uuid.U
 
 // SetProcessingStatus updates only processing_status (e.g. failed).
 func (r *AvatarRepository) SetProcessingStatus(ctx context.Context, id uuid.UUID, status models.ProcessingStatus) error {
-	_, err := r.pool.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		UPDATE avatars SET processing_status = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL
 	`, id, string(status))
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return usecase.ErrNotFound
+	}
+	return nil
 }
 
 type rowScanner interface {
@@ -189,12 +195,11 @@ func scanAvatarRow(row rowScanner) (*models.Avatar, error) {
 		thumbsRaw []byte
 		w, h      sql.NullInt32
 		deletedAt sql.NullTime
-		uploadSt  string
 		procSt    string
 	)
 	err := row.Scan(
 		&a.ID, &a.UserID, &a.FileName, &a.MimeType, &a.SizeBytes, &w, &h, &a.S3Key, &thumbsRaw,
-		&uploadSt, &procSt, &a.CreatedAt, &a.UpdatedAt, &deletedAt,
+		&procSt, &a.CreatedAt, &a.UpdatedAt, &deletedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, usecase.ErrNotFound
@@ -202,7 +207,6 @@ func scanAvatarRow(row rowScanner) (*models.Avatar, error) {
 	if err != nil {
 		return nil, err
 	}
-	a.UploadStatus = models.UploadStatus(uploadSt)
 	a.ProcessingStatus = models.ProcessingStatus(procSt)
 	if w.Valid {
 		v := int(w.Int32)

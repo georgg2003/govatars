@@ -74,8 +74,7 @@ func (s *Server) UploadAvatar(ctx echo.Context, params UploadAvatarParams) error
 }
 
 func (s *Server) DeleteAvatarById(ctx echo.Context, avatarId AvatarId, params DeleteAvatarByIdParams) error {
-	id := avatarId
-	err := s.avatars.DeleteByID(ctx.Request().Context(), params.XUserID, id)
+	err := s.avatars.DeleteByID(ctx.Request().Context(), params.XUserID, avatarId)
 	if err != nil {
 		return s.mapAvatarErr(ctx, err)
 	}
@@ -83,11 +82,10 @@ func (s *Server) DeleteAvatarById(ctx echo.Context, avatarId AvatarId, params De
 }
 
 func (s *Server) GetAvatarImage(ctx echo.Context, avatarId AvatarId, params GetAvatarImageParams) error {
-	id := avatarId
 	size := ptrStringEnum(params.Size)
 	format := ptrStringEnum(params.Format)
 
-	pl, err := s.avatars.GetImage(ctx.Request().Context(), id, size, format)
+	pl, err := s.avatars.GetImage(ctx.Request().Context(), avatarId, size, format)
 	if err != nil {
 		return s.mapAvatarErr(ctx, err)
 	}
@@ -95,8 +93,7 @@ func (s *Server) GetAvatarImage(ctx echo.Context, avatarId AvatarId, params GetA
 }
 
 func (s *Server) GetAvatarMetadata(ctx echo.Context, avatarId AvatarId) error {
-	id := avatarId
-	a, err := s.avatars.ByID(ctx.Request().Context(), id)
+	a, err := s.avatars.ByID(ctx.Request().Context(), avatarId)
 	if err != nil {
 		return s.mapAvatarErr(ctx, err)
 	}

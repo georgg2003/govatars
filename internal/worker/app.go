@@ -53,6 +53,8 @@ func (a *App) Close() error {
 }
 
 // Run opens two channels, declares topology on the first, starts consumers, and blocks until ctx is done.
+//
+// Each *amqp.Channel is used from exactly one consumeLoop goroutine, so channel calls are not concurrent per channel.
 func (a *App) Run(ctx context.Context) error {
 	chUp, err := a.conn.Channel()
 	if err != nil {

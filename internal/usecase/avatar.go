@@ -152,7 +152,6 @@ func (s *AvatarService) Upload(ctx context.Context, userID string, filename stri
 		MimeType:         ct,
 		SizeBytes:        int64(len(body)),
 		S3Key:            key,
-		UploadStatus:     models.UploadStatusReady,
 		ProcessingStatus: models.ProcessingStatusPending,
 		CreatedAt:        now,
 		UpdatedAt:        now,
