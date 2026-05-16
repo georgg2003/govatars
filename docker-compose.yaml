@@ -134,6 +134,7 @@ services:
     image: otel/opentelemetry-collector:0.143.0
     container_name: otel-collector
     ports:
+      - "8889:8889"
       - "4317:4317"
       - "13133:13133"
     command:
@@ -167,6 +168,34 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
+
+  node_exporter:
+    image: prom/node-exporter:latest
+    container_name: node_exporter
+    ports:
+      - '9100:9100'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9100/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - '9090:9090'
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9090/metrics"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
 volumes:
   govatars_pg:

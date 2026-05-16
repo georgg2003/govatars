@@ -21,6 +21,8 @@ import (
 	"govatars/internal/pkg/contextlib"
 	srvmw "govatars/internal/pkg/middleware"
 	"govatars/internal/serverapp"
+
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 )
 
 // Run builds Echo, serves until ctx is cancelled, then shuts down gracefully.
@@ -30,6 +32,12 @@ func Run(ctx context.Context, application *serverapp.App) error {
 
 	e := echo.New()
 	e.HideBanner = true
+	e.Use(
+		otelecho.Middleware(
+			"govatars",
+			otelecho.WithMeterProvider(application.OTELMetricsProvider.MeterProvider),
+		),
+	)
 	e.Use(middleware.RequestID())
 	e.Use(srvmw.RequestUserID())
 	e.Use(srvmw.RequestContext())

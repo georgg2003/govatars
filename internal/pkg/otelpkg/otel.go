@@ -81,14 +81,14 @@ func NewOTELLoggerProvider(
 }
 
 type OTELMetricsProvider struct {
-	provider        *sdkmetrics.MeterProvider
+	MeterProvider   *sdkmetrics.MeterProvider
 	shutdownTimeout time.Duration
 }
 
 func (p *OTELMetricsProvider) Shutdown(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, p.shutdownTimeout)
 	defer cancel()
-	if err := p.provider.Shutdown(ctx); err != nil {
+	if err := p.MeterProvider.Shutdown(ctx); err != nil {
 		return apperr.Wrap(err, "failed to shutdown metrics provider")
 	}
 	return nil
@@ -124,5 +124,5 @@ func NewOTELMetricsProvider(
 			),
 		),
 	)
-	return &OTELMetricsProvider{provider: provider, shutdownTimeout: shutdownTimeout}, nil
+	return &OTELMetricsProvider{MeterProvider: provider, shutdownTimeout: shutdownTimeout}, nil
 }

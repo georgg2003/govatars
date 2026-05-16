@@ -15,11 +15,18 @@ exporters:
     compression: "gzip"
     tls:
       insecure: true  # dev only
+  prometheus:
+    endpoint: '0.0.0.0:8889'
+    resource_to_telemetry_conversion:
+      enabled: true
 
 service:
   pipelines:
     logs:
       receivers: [otlp]
-      processors:
-        - batch
+      processors: [batch]
       exporters: [otlphttp/loki]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]

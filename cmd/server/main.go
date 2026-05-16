@@ -29,6 +29,7 @@ func run() int {
 		return 1
 	}
 	logger := logging.NewServerLogger(logging.LevelFromString(cfg.Logging.Level))
+	var otelMetricsProvider *otelpkg.OTELMetricsProvider
 
 	if cfg.OTEL.Enabled {
 		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
@@ -42,11 +43,21 @@ func run() int {
 				logger.ErrorContext(ctx, "otel logger provider init failed", "err", err)
 				return 1
 			}
+			defer otelLoggerProvider.Shutdown(ctx)
 			logger = logging.NewOTELServerLogger(otelLoggerProvider)
+		}
+		if cfg.OTEL.OTELMetricsProvider.Enabled {
+			var err error
+			otelMetricsProvider, err = otelpkg.NewOTELMetricsProvider(ctx, res, cfg.OTEL.OTELMetricsProvider)
+			if err != nil {
+				logger.ErrorContext(ctx, "otel metrics provider init failed", "err", err)
+				return 1
+			}
+			defer otelMetricsProvider.Shutdown(ctx)
 		}
 	}
 
-	application, err := serverapp.New(ctx, logger, cfg)
+	application, err := serverapp.New(ctx, logger, cfg, otelMetricsProvider)
 	if err != nil {
 		logger.ErrorContext(ctx, "app init failed", "err", err)
 		return 1

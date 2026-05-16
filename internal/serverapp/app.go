@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	"govatars/internal/repository/rabbitmq"
 	s3repo "govatars/internal/repository/s3"
@@ -19,17 +20,23 @@ const placeholderPrewarmTimeout = 30 * time.Second
 
 // App holds infrastructure opened for the API server.
 type App struct {
-	Logger    *slog.Logger
-	Cfg       *config.App
-	Postgres  *postgres.Pool
-	S3        *s3repo.Client
-	Publisher *rabbitmq.Publisher
-	Health    *usecase.Health
-	Avatar    *usecase.AvatarService
+	Logger              *slog.Logger
+	Cfg                 *config.App
+	Postgres            *postgres.Pool
+	S3                  *s3repo.Client
+	Publisher           *rabbitmq.Publisher
+	Health              *usecase.Health
+	Avatar              *usecase.AvatarService
+	OTELMetricsProvider *otelpkg.OTELMetricsProvider
 }
 
 // New opens Postgres, S3, and RabbitMQ publisher, then builds use cases.
-func New(ctx context.Context, log *slog.Logger, cfg *config.App) (*App, error) {
+func New(
+	ctx context.Context,
+	log *slog.Logger,
+	cfg *config.App,
+	otelMetricsProvider *otelpkg.OTELMetricsProvider,
+) (*App, error) {
 	pgPool, err := postgres.New(ctx, cfg.Postgres)
 	if err != nil {
 		return nil, err
@@ -69,13 +76,14 @@ func New(ctx context.Context, log *slog.Logger, cfg *config.App) (*App, error) {
 	prewarmCancel()
 
 	return &App{
-		Logger:    log,
-		Cfg:       cfg,
-		Postgres:  pgPool,
-		S3:        s3Client,
-		Publisher: pub,
-		Health:    healthUC,
-		Avatar:    avatarUC,
+		Logger:              log,
+		Cfg:                 cfg,
+		Postgres:            pgPool,
+		S3:                  s3Client,
+		Publisher:           pub,
+		Health:              healthUC,
+		Avatar:              avatarUC,
+		OTELMetricsProvider: otelMetricsProvider,
 	}, nil
 }
 
