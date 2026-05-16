@@ -1,0 +1,6 @@
+bin/
+.git/
+.idea/
+.vscode/
+*.out
+coverage.*

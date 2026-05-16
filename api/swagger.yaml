@@ -1,0 +1,355 @@
+openapi: 3.0.3
+info:
+  title: Govatars (GophProfile) API
+  version: "1.0.0"
+  description: |
+    REST API for uploading, retrieving, and deleting user avatars.
+    Metadata is stored in PostgreSQL; files are stored in S3-compatible storage.
+    Thumbnails are produced asynchronously via RabbitMQ workers.
+
+tags:
+  - name: avatars
+    description: Avatar resources
+  - name: users
+    description: User-scoped avatar operations
+  - name: system
+    description: Health and diagnostics
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Health check
+      description: Returns status of the process and dependencies (database, object storage, broker).
+      operationId: getHealth
+      responses:
+        "200":
+          description: Component statuses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/v1/avatars:
+    post:
+      tags: [avatars]
+      summary: Upload an avatar
+      operationId: uploadAvatar
+      parameters:
+        - $ref: "#/components/parameters/XUserID"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Image file (max 10MB; jpeg, png, or webp recommended)
+      responses:
+        "201":
+          description: Avatar accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarUploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+
+  /api/v1/avatars/{avatar_id}:
+    get:
+      tags: [avatars]
+      summary: Get avatar image bytes
+      operationId: getAvatarImage
+      parameters:
+        - $ref: "#/components/parameters/AvatarId"
+        - $ref: "#/components/parameters/Size"
+        - $ref: "#/components/parameters/Format"
+      responses:
+        "200":
+          description: Image body
+          headers:
+            Content-Type:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+            ETag:
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [avatars]
+      summary: Delete avatar by id
+      operationId: deleteAvatarById
+      parameters:
+        - $ref: "#/components/parameters/AvatarId"
+        - $ref: "#/components/parameters/XUserID"
+      responses:
+        "204":
+          description: Deleted (soft delete; async storage cleanup)
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/avatars/{avatar_id}/metadata:
+    get:
+      tags: [avatars]
+      summary: Get avatar metadata
+      operationId: getAvatarMetadata
+      parameters:
+        - $ref: "#/components/parameters/AvatarId"
+      responses:
+        "200":
+          description: Metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvatarMetadata"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/users/{user_id}/avatar:
+    get:
+      tags: [users]
+      summary: Get current avatar for user
+      operationId: getUserAvatar
+      parameters:
+        - $ref: "#/components/parameters/UserIdPath"
+        - $ref: "#/components/parameters/Size"
+        - $ref: "#/components/parameters/Format"
+      responses:
+        "200":
+          description: Image body
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [users]
+      summary: Delete user's avatar
+      operationId: deleteUserAvatar
+      parameters:
+        - $ref: "#/components/parameters/UserIdPath"
+        - $ref: "#/components/parameters/XUserID"
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/users/{user_id}/avatars:
+    get:
+      tags: [users]
+      summary: List user's avatars
+      operationId: listUserAvatars
+      parameters:
+        - $ref: "#/components/parameters/UserIdPath"
+      responses:
+        "200":
+          description: List of avatars
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvatarListItem"
+
+components:
+  parameters:
+    XUserID:
+      name: X-User-ID
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Authenticated or trusted user id (caller identity)
+    AvatarId:
+      name: avatar_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserIdPath:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Size:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: ["64x64", "128x128", "256x256", "512x512", "100x100", "300x300", "original"]
+    Format:
+      name: format
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [jpeg, png, webp]
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Caller cannot perform this action
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: File exceeds maximum size
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/FileTooLargeError"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        details:
+          type: string
+    FileTooLargeError:
+      type: object
+      required: [error, max_size]
+      properties:
+        error:
+          type: string
+          example: File too large
+        max_size:
+          type: integer
+          format: int64
+          example: 10485760
+    AvatarUploadResponse:
+      type: object
+      required: [id, user_id, url, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        url:
+          type: string
+          description: Public or internal URL for the avatar resource
+        status:
+          type: string
+          example: processing
+        created_at:
+          type: string
+          format: date-time
+    AvatarMetadata:
+      type: object
+      required: [id, user_id, file_name, mime_type, size, dimensions, thumbnails, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+        file_name:
+          type: string
+        mime_type:
+          type: string
+        size:
+          type: integer
+          format: int64
+        dimensions:
+          type: object
+          required: [width, height]
+          properties:
+            width:
+              type: integer
+            height:
+              type: integer
+        thumbnails:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThumbnailInfo"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ThumbnailInfo:
+      type: object
+      required: [size, format, url]
+      properties:
+        size:
+          type: string
+          example: "256x256"
+        format:
+          type: string
+          enum: [jpeg, png, webp]
+          description: Image variant key as stored for this thumbnail (matches S3 / worker keys)
+        url:
+          type: string
+    AvatarListItem:
+      type: object
+      required: [id, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    HealthResponse:
+      type: object
+      description: Arbitrary key/value health statuses (shape may evolve)
+      additionalProperties: true

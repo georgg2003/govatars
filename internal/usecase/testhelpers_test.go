@@ -1,0 +1,47 @@
+package usecase_test
+
+import (
+	"log/slog"
+
+	"govatars/internal/pkg/config"
+)
+
+// minPNG is a 1×1 fully-decodable PNG used by every avatar use case test that needs a real image.
+var minPNG = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+	0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+	0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41,
+	0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00,
+	0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+	0x42, 0x60, 0x82,
+}
+
+// testDiscardLog produces a logger that drops every record.
+func testDiscardLog() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
+// testCfg returns a normalized [config.App] suitable for unit tests of [usecase.AvatarService].
+func testCfg() *config.App {
+	cfg := &config.App{
+		HTTP: config.HTTP{PublicBaseURL: "http://localhost:8080"},
+		RabbitMQ: config.RabbitMQ{
+			UploadRoutingKey: "avatar.upload",
+			DeleteRoutingKey: "avatar.delete",
+		},
+	}
+	cfg.Normalize()
+	return cfg
+}
+
+// testCatalog builds the thumbnail catalog from the normalized test config; panics on error.
+func testCatalog() config.ThumbnailCatalog {
+	cat, err := testCfg().Avatars.Catalog()
+	if err != nil {
+		panic(err)
+	}
+	return cat
+}

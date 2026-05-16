@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avatar gallery</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+</head>
+<body class="min-h-screen bg-slate-900 text-white p-8">
+  <div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold mb-4">Avatars</h1>
+    <p id="userLabel" class="text-slate-300 mb-6"></p>
+    <div class="flex items-center gap-3 mb-6">
+      <button id="refreshBtn" class="px-3 py-2 rounded bg-white/10 hover:bg-white/15 border border-white/10">
+        Refresh
+      </button>
+      <span id="status" class="text-slate-400 text-sm"></span>
+    </div>
+    <div id="list" class="space-y-4"></div>
+    <p id="err" class="text-red-400 hidden mt-4"></p>
+    <a href="/web/upload" class="text-purple-400 underline mt-8 inline-block">Upload</a>
+  </div>
+  <script>
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    const userId = parts[parts.length - 1] || '';
+    document.getElementById('userLabel').textContent = 'User: ' + userId;
+
+    const errEl = document.getElementById('err');
+    const statusEl = document.getElementById('status');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    function setStatus(msg) {
+      statusEl.textContent = msg || '';
+    }
+    function showErr(msg) {
+      errEl.textContent = msg;
+      errEl.classList.remove('hidden');
+    }
+    function clearErr() {
+      errEl.classList.add('hidden');
+      errEl.textContent = '';
+    }
+    function httpError(r) {
+      const e = new Error('HTTP ' + r.status);
+      e.status = r.status;
+      return e;
+    }
+
+    function buildImageURL(avatarId, size, format) {
+      let u = '/api/v1/avatars/' + encodeURIComponent(avatarId);
+      const qs = [];
+      if (size) qs.push('size=' + encodeURIComponent(size));
+      if (format) qs.push('format=' + encodeURIComponent(format));
+      if (qs.length) u += '?' + qs.join('&');
+      return u;
+    }
+
+    function downloadBlob(blob, filename) {
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function extForFormat(fmt) {
+      switch ((fmt || '').toLowerCase()) {
+        case 'jpg':
+        case 'jpeg': return 'jpg';
+        case 'png': return 'png';
+        case 'webp': return 'webp';
+        default: return 'bin';
+      }
+    }
+
+    /** OpenAPI uses `jpeg`; UI may say `jpg`. */
+    function apiQueryFormat(fmt) {
+      if (!fmt) return '';
+      const f = String(fmt).toLowerCase();
+      if (f === 'jpg') return 'jpeg';
+      return f;
+    }
+
+    async function fetchJSON(url, opts) {
+      const r = await fetch(url, opts || {});
+      if (!r.ok) throw httpError(r);
+      return await r.json();
+    }
+
+    async function fetchBytes(url, opts) {
+      const r = await fetch(url, opts || {});
+      if (!r.ok) throw httpError(r);
+      return await r.blob();
+    }
+
+    async function deleteAvatar(avatarId) {
+      const r = await fetch('/api/v1/avatars/' + encodeURIComponent(avatarId), {
+        method: 'DELETE',
+        headers: { 'X-User-ID': userId }
+      });
+      if (r.status === 204) return;
+      throw httpError(r);
+    }
+
+    async function loadList() {
+      clearErr();
+      setStatus('Loading…');
+      const root = document.getElementById('list');
+      root.innerHTML = '';
+      try {
+        const items = await fetchJSON('/api/v1/users/' + encodeURIComponent(userId) + '/avatars');
+        if (!items.length) {
+          root.innerHTML = '<p class="text-slate-400">No avatars yet.</p>';
+          setStatus('');
+          return;
+        }
+        items.forEach(function (it) {
+          const card = document.createElement('div');
+          card.className = 'bg-white/5 p-4 rounded-lg border border-white/10';
+
+          const previewURL = buildImageURL(it.id, '300x300', '');
+
+          const metaWrapId = 'meta_' + it.id;
+          const sizeSelId = 'size_' + it.id;
+          const fmtSelId = 'fmt_' + it.id;
+          const dlBtnId = 'dl_' + it.id;
+          const openBtnId = 'open_' + it.id;
+          const delBtnId = 'del_' + it.id;
+          const metaBtnId = 'metaBtn_' + it.id;
+
+          card.innerHTML =
+            '<div class="flex items-start gap-4">' +
+              '<img src="' + previewURL + '" alt="" class="w-24 h-24 object-cover rounded bg-black/30" />' +
+              '<div class="flex-1 min-w-0">' +
+                '<div class="font-mono text-sm break-all">' + it.id + '</div>' +
+                '<div class="text-slate-400 text-sm mt-1">Status: ' + (it.status || '-') + '</div>' +
+                '<div class="mt-4 flex flex-wrap items-center gap-3">' +
+                  '<button id="' + metaBtnId + '" class="px-3 py-2 rounded bg-white/10 hover:bg-white/15 border border-white/10">Metadata</button>' +
+                  '<button id="' + delBtnId + '" class="px-3 py-2 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200">Delete</button>' +
+                  '<div class="flex items-center gap-2">' +
+                    '<label class="text-slate-300 text-sm">Size</label>' +
+                    '<select id="' + sizeSelId + '" class="bg-black/30 border border-white/10 rounded px-2 py-2 text-sm">' +
+                      '<option value="">original</option>' +
+                      '<option value="64x64">64×64</option>' +
+                      '<option value="128x128">128×128</option>' +
+                      '<option value="256x256">256×256</option>' +
+                      '<option value="512x512">512×512</option>' +
+                      '<option value="100x100">100×100</option>' +
+                      '<option value="300x300">300×300</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<div class="flex items-center gap-2">' +
+                    '<label class="text-slate-300 text-sm">Format</label>' +
+                    '<select id="' + fmtSelId + '" class="bg-black/30 border border-white/10 rounded px-2 py-2 text-sm">' +
+                      '<option value="">auto</option>' +
+                      '<option value="png">png</option>' +
+                      '<option value="jpg">jpg</option>' +
+                      '<option value="webp">webp</option>' +
+                    '</select>' +
+                  '</div>' +
+                  '<button id="' + openBtnId + '" class="px-3 py-2 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200">Open in new tab</button>' +
+                  '<button id="' + dlBtnId + '" class="px-3 py-2 rounded bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/40 text-blue-200">Download</button>' +
+                '</div>' +
+                '<div id="' + metaWrapId + '" class="hidden mt-4 bg-black/30 border border-white/10 rounded p-3">' +
+                  '<div class="text-slate-300 text-sm mb-2">Metadata</div>' +
+                  '<pre class="text-xs text-slate-200 whitespace-pre-wrap break-words"></pre>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+
+          root.appendChild(card);
+
+          const metaBtn = document.getElementById(metaBtnId);
+          const delBtn = document.getElementById(delBtnId);
+          const dlBtn = document.getElementById(dlBtnId);
+          const openBtn = document.getElementById(openBtnId);
+          const sizeSel = document.getElementById(sizeSelId);
+          const fmtSel = document.getElementById(fmtSelId);
+          const metaWrap = document.getElementById(metaWrapId);
+          const metaPre = metaWrap.querySelector('pre');
+
+          metaBtn.addEventListener('click', async function () {
+            clearErr();
+            const isHidden = metaWrap.classList.contains('hidden');
+            if (!isHidden) {
+              metaWrap.classList.add('hidden');
+              return;
+            }
+            metaWrap.classList.remove('hidden');
+            metaPre.textContent = 'Loading…';
+            try {
+              const md = await fetchJSON('/api/v1/avatars/' + encodeURIComponent(it.id) + '/metadata');
+              metaPre.textContent = JSON.stringify(md, null, 2);
+            } catch (e) {
+              metaPre.textContent = 'Failed to load metadata: ' + e.message;
+            }
+          });
+
+          delBtn.addEventListener('click', async function () {
+            clearErr();
+            if (!confirm('Delete avatar ' + it.id + '?')) return;
+            delBtn.disabled = true;
+            delBtn.textContent = 'Deleting…';
+            try {
+              await deleteAvatar(it.id);
+              await loadList();
+            } catch (e) {
+              showErr('Delete failed: ' + e.message);
+            } finally {
+              delBtn.disabled = false;
+              delBtn.textContent = 'Delete';
+            }
+          });
+
+          openBtn.addEventListener('click', function () {
+            clearErr();
+            const size = sizeSel.value;
+            const fmt = apiQueryFormat(fmtSel.value);
+            const url = buildImageURL(it.id, size, fmt);
+            window.open(url, '_blank', 'noopener,noreferrer');
+          });
+
+          dlBtn.addEventListener('click', async function () {
+            clearErr();
+            const size = sizeSel.value;
+            const fmt = apiQueryFormat(fmtSel.value);
+            const url = buildImageURL(it.id, size, fmt);
+            dlBtn.disabled = true;
+            dlBtn.textContent = 'Downloading…';
+            try {
+              const blob = await fetchBytes(url);
+              const ext = fmt ? extForFormat(fmt) : 'img';
+              const fname = it.id + (size ? '_' + size : '') + '.' + ext;
+              downloadBlob(blob, fname);
+            } catch (e) {
+              showErr('Download failed: ' + e.message);
+            } finally {
+              dlBtn.disabled = false;
+              dlBtn.textContent = 'Download';
+            }
+          });
+        });
+        setStatus('');
+      } catch (e) {
+        setStatus('');
+        showErr(e.message);
+      }
+    }
+
+    refreshBtn.addEventListener('click', function () {
+      loadList();
+    });
+
+    loadList();
+  </script>
+</body>
+</html>
