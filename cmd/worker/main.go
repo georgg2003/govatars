@@ -8,6 +8,7 @@ import (
 
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	s3repo "govatars/internal/repository/s3"
 	"govatars/internal/usecase"
@@ -30,6 +31,21 @@ func run() int {
 	}
 
 	log := logging.NewWorkerLogger(logging.LevelFromString(cfg.Logging.Level))
+	if cfg.OTEL.Enabled {
+		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
+		if err != nil {
+			log.ErrorContext(ctx, "otel resource init failed", "err", err)
+			return 1
+		}
+		if cfg.OTEL.OTELLoggerProvider.Enabled {
+			otelLoggerProvider, err := otelpkg.NewOTELLoggerProvider(ctx, res, cfg.OTEL.OTELLoggerProvider)
+			if err != nil {
+				log.ErrorContext(ctx, "otel logger provider init failed", "err", err)
+				return 1
+			}
+			log = logging.NewOTELWorkerLogger(otelLoggerProvider)
+		}
+	}
 
 	pgPool, err := postgres.New(ctx, cfg.Postgres)
 	if err != nil {

@@ -90,7 +90,13 @@ func Run(ctx context.Context, application *serverapp.App) error {
 	if err != nil {
 		return fmt.Errorf("avatars catalog: %w", err)
 	}
-	srv := httphandler.NewServer(application.Health, application.Avatar, cfg.Avatars.MaxUploadBytes, thumbs.Labels, httphandler.WithLogger(logger))
+	srv := httphandler.NewServer(
+		application.Health,
+		application.Avatar,
+		cfg.Avatars.MaxUploadBytes,
+		thumbs.Labels,
+		httphandler.WithLogger(logger),
+	)
 	//nolint:contextcheck // Route registration; each request still carries context via Echo.
 	web.New(application.Avatar, cfg.HTTP.StaticDir, web.WithLogger(logger)).Register(e)
 	httphandler.RegisterHandlers(e, srv)

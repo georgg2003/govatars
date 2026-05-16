@@ -2,6 +2,7 @@
 package logging
 
 import (
+	"govatars/internal/pkg/otelpkg"
 	"io"
 	"log/slog"
 	"os"
@@ -23,9 +24,17 @@ func NewServerLogger(level slog.Level) *slog.Logger {
 	return slog.New(&ContextHandler{Handler: newBaseHandler(os.Stderr, level)})
 }
 
+func NewOTELServerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider) *slog.Logger {
+	return slog.New(&ContextHandler{Handler: otelLoggerProvider.NewSlogHandler()})
+}
+
 // NewWorkerLogger returns a logger for the worker process: JSON to stderr without HTTP request enrichment (no [ContextHandler]).
 func NewWorkerLogger(level slog.Level) *slog.Logger {
 	return slog.New(newBaseHandler(os.Stderr, level))
+}
+
+func NewOTELWorkerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider) *slog.Logger {
+	return slog.New(otelLoggerProvider.NewSlogHandler())
 }
 
 // DiscardLogger returns a logger that discards all records. Use as the default for optional loggers (e.g. functional options).

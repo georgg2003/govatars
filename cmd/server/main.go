@@ -10,6 +10,7 @@ import (
 	"govatars/internal/httpserver"
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/serverapp"
 )
 
@@ -28,6 +29,22 @@ func run() int {
 		return 1
 	}
 	logger := logging.NewServerLogger(logging.LevelFromString(cfg.Logging.Level))
+
+	if cfg.OTEL.Enabled {
+		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
+		if err != nil {
+			logger.ErrorContext(ctx, "otel resource init failed", "err", err)
+			return 1
+		}
+		if cfg.OTEL.OTELLoggerProvider.Enabled {
+			otelLoggerProvider, err := otelpkg.NewOTELLoggerProvider(ctx, res, cfg.OTEL.OTELLoggerProvider)
+			if err != nil {
+				logger.ErrorContext(ctx, "otel logger provider init failed", "err", err)
+				return 1
+			}
+			logger = logging.NewOTELServerLogger(otelLoggerProvider)
+		}
+	}
 
 	application, err := serverapp.New(ctx, logger, cfg)
 	if err != nil {

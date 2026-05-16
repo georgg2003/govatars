@@ -79,6 +79,8 @@ services:
       GOVATARS_S3_ENDPOINT: "minio:9000"
       GOVATARS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       GOVATARS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      GOVATARS_OTEL_RESOURCE_SERVICE_NAME: govatars_server
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=development
     volumes:
       - ./config/config.yaml:/app/config/config.yaml:ro
     depends_on:
@@ -90,6 +92,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1"]
       interval: 10s
@@ -109,6 +113,8 @@ services:
       GOVATARS_S3_ENDPOINT: "minio:9000"
       GOVATARS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       GOVATARS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      GOVATARS_OTEL_RESOURCE_SERVICE_NAME: govatars_worker
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=development
     volumes:
       - ./config/config.yaml:/app/config/config.yaml:ro
     depends_on:
@@ -120,9 +126,51 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector:0.143.0
+    container_name: otel-collector
+    ports:
+      - "4317:4317"
+      - "13133:13133"
+    command:
+      - "--config=/etc/otel-collector-config.yml"
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yml:ro
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.6.3
+    container_name: loki
+    command:
+      - "-config.file=/etc/loki/local-config.yml"
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yml:ro
+      - loki-data:/loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.3.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - loki
     restart: unless-stopped
 
 volumes:
   govatars_pg:
   govatars_minio:
   govatars_rabbit:
+  loki-data:
+  grafana-data:

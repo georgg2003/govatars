@@ -23,6 +23,7 @@ type App struct {
 	S3       S3       `mapstructure:"s3"`
 	RabbitMQ RabbitMQ `mapstructure:"rabbitmq"`
 	Avatars  Avatars  `mapstructure:"avatars"`
+	OTEL     OTEL     `mapstructure:"otel"`
 }
 
 // Logging configures process-wide slog output (level only for now).
@@ -125,6 +126,37 @@ type RabbitMQ struct {
 	DeleteConsumerTag string `mapstructure:"delete_consumer_tag"`
 }
 
+type OTEL struct {
+	Enabled             bool                `mapstructure:"enabled"`
+	Resource            OTELResource        `mapstructure:"resource"`
+	OTELLoggerProvider  OTELLoggerProvider  `mapstructure:"otel_logger_provider"`
+	OTELMetricsProvider OTELMetricsProvider `mapstructure:"otel_metrics_provider"`
+}
+
+type OTELLoggerProvider struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Endpoint        string        `mapstructure:"endpoint"`
+	Insecure        bool          `mapstructure:"insecure"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	BatchSize       int           `mapstructure:"batch_size"`
+	BatchTimeout    time.Duration `mapstructure:"batch_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+type OTELMetricsProvider struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Endpoint        string        `mapstructure:"endpoint"`
+	Insecure        bool          `mapstructure:"insecure"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	Interval        time.Duration `mapstructure:"interval"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+type OTELResource struct {
+	ServiceName    string `mapstructure:"service_name"`
+	ServiceVersion string `mapstructure:"service_version"`
+}
+
 // Load reads configuration: defaults → optional YAML → environment (GOVATARS_*).
 func Load() (*App, error) {
 	fs := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -204,4 +236,18 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.consumer_handle_timeout", "3m")
 	v.SetDefault("rabbitmq.upload_consumer_tag", "govatars-upload")
 	v.SetDefault("rabbitmq.delete_consumer_tag", "govatars-delete")
+
+	v.SetDefault("otel.resource.service_name", "govatars")
+	v.SetDefault("otel.resource.service_version", "1.0.0")
+	v.SetDefault("otel.otel_logger_provider.endpoint", "http://otel-collector:4317")
+	v.SetDefault("otel.otel_logger_provider.insecure", true)
+	v.SetDefault("otel.otel_logger_provider.timeout", "10s")
+	v.SetDefault("otel.otel_logger_provider.batch_size", 100)
+	v.SetDefault("otel.otel_logger_provider.batch_timeout", "10s")
+	v.SetDefault("otel.otel_logger_provider.shutdown_timeout", "10s")
+	v.SetDefault("otel.otel_metrics_provider.endpoint", "http://otel-collector:4317")
+	v.SetDefault("otel.otel_metrics_provider.insecure", true)
+	v.SetDefault("otel.otel_metrics_provider.timeout", "10s")
+	v.SetDefault("otel.otel_metrics_provider.interval", "10s")
+	v.SetDefault("otel.otel_metrics_provider.shutdown_timeout", "10s")
 }
