@@ -64,7 +64,8 @@ func run() int {
 			}()
 		}
 		if cfg.OTEL.OTELTracerProvider.Enabled {
-			otelTracerProvider, err := otelpkg.NewOTELTracerProvider(ctx, res, cfg.OTEL.OTELTracerProvider)
+			var err error
+			otelTracerProvider, err = otelpkg.NewOTELTracerProvider(ctx, res, cfg.OTEL.OTELTracerProvider)
 			if err != nil {
 				logger.ErrorContext(ctx, "otel tracer provider init failed", "err", err)
 				return 1
