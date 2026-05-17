@@ -10,6 +10,7 @@ import (
 	"govatars/internal/httpserver"
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/metrics"
 	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/serverapp"
 )
@@ -31,6 +32,7 @@ func run() int {
 	logger := logging.NewServerLogger(logging.LevelFromString(cfg.Logging.Level))
 	var otelMetricsProvider *otelpkg.OTELMetricsProvider
 	var otelTracerProvider *otelpkg.OTELTracerProvider
+	var biz *metrics.Business
 	if cfg.OTEL.Enabled {
 		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
 		if err != nil {
@@ -80,6 +82,16 @@ func run() int {
 				}
 			}()
 		}
+		otelpkg.InstallGlobals(otelTracerProvider, otelMetricsProvider)
+		if otelMetricsProvider != nil {
+			biz, err = metrics.NewBusiness(otelMetricsProvider.MeterProvider)
+		} else {
+			biz, err = metrics.NewBusiness(nil)
+		}
+		if err != nil {
+			logger.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
+		}
 	}
 
 	application, err := serverapp.New(
@@ -88,6 +100,7 @@ func run() int {
 		cfg,
 		otelMetricsProvider,
 		otelTracerProvider,
+		biz,
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "app init failed", "err", err)

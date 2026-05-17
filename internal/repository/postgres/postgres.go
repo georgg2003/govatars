@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/exaring/otelpgx"
 
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
@@ -42,6 +43,7 @@ func New(ctx context.Context, pg config.Postgres) (*Pool, error) {
 	if pg.PoolMaxConnLifetimeJitter > 0 {
 		poolCfg.MaxConnLifetimeJitter = pg.PoolMaxConnLifetimeJitter
 	}
+	poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {

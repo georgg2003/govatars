@@ -29,7 +29,7 @@ func (s *AvatarQueueJobsSuite) SetupTest() {
 	s.ctrl = gomock.NewController(s.T())
 	s.repo = repomocks.NewMockAvatarRepository(s.ctrl)
 	s.store = repomocks.NewMockObjectStorage(s.ctrl)
-	s.jobs = usecase.NewAvatarQueueJobs(testDiscardLog(), s.repo, s.store, testCatalog())
+	s.jobs = usecase.NewAvatarQueueJobs(testDiscardLog(), s.repo, s.store, testCatalog(), nil)
 }
 
 func (s *AvatarQueueJobsSuite) TestProcessAvatarUpload_Success() {

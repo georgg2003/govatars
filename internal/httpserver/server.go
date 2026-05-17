@@ -20,6 +20,7 @@ import (
 	"govatars/internal/delivery/web"
 	"govatars/internal/pkg/contextlib"
 	srvmw "govatars/internal/pkg/middleware"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/serverapp"
 
 	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
@@ -41,7 +42,7 @@ func Run(ctx context.Context, application *serverapp.App) error {
 		opts = append(opts, otelecho.WithMeterProvider(application.OTELMetricsProvider.MeterProvider))
 	}
 	if len(opts) > 0 {
-		e.Use(otelecho.Middleware("govatars", opts...))
+		e.Use(otelecho.Middleware(otelpkg.ScopeSlog, opts...))
 	}
 
 	e.Use(middleware.RequestID())

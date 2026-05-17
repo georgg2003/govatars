@@ -8,6 +8,7 @@ import (
 
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/metrics"
 	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	s3repo "govatars/internal/repository/s3"
@@ -32,12 +33,15 @@ func run() int {
 
 	logLevel := logging.LevelFromString(cfg.Logging.Level)
 	log := logging.NewWorkerLogger(logLevel)
+	var biz *metrics.Business
 	if cfg.OTEL.Enabled {
 		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
 		if err != nil {
 			log.ErrorContext(ctx, "otel resource init failed", "err", err)
 			return 1
 		}
+		var otelMetricsProvider *otelpkg.OTELMetricsProvider
+		var otelTracerProvider *otelpkg.OTELTracerProvider
 		if cfg.OTEL.OTELLoggerProvider.Enabled {
 			otelLoggerProvider, err := otelpkg.NewOTELLoggerProvider(ctx, res, cfg.OTEL.OTELLoggerProvider)
 			if err != nil {
@@ -51,6 +55,42 @@ func run() int {
 				}
 			}()
 			log = logging.NewOTELWorkerLogger(otelLoggerProvider, logLevel)
+		}
+		if cfg.OTEL.OTELMetricsProvider.Enabled {
+			otelMetricsProvider, err = otelpkg.NewOTELMetricsProvider(ctx, res, cfg.OTEL.OTELMetricsProvider)
+			if err != nil {
+				log.ErrorContext(ctx, "otel metrics provider init failed", "err", err)
+				return 1
+			}
+			defer func() {
+				shutdownCtx := context.WithoutCancel(ctx)
+				if err := otelMetricsProvider.Shutdown(shutdownCtx); err != nil {
+					log.ErrorContext(shutdownCtx, "otel metrics provider shutdown failed", "err", err)
+				}
+			}()
+		}
+		if cfg.OTEL.OTELTracerProvider.Enabled {
+			otelTracerProvider, err = otelpkg.NewOTELTracerProvider(ctx, res, cfg.OTEL.OTELTracerProvider)
+			if err != nil {
+				log.ErrorContext(ctx, "otel tracer provider init failed", "err", err)
+				return 1
+			}
+			defer func() {
+				shutdownCtx := context.WithoutCancel(ctx)
+				if err := otelTracerProvider.Shutdown(shutdownCtx); err != nil {
+					log.ErrorContext(shutdownCtx, "otel tracer provider shutdown failed", "err", err)
+				}
+			}()
+		}
+		otelpkg.InstallGlobals(otelTracerProvider, otelMetricsProvider)
+		if otelMetricsProvider != nil {
+			biz, err = metrics.NewBusiness(otelMetricsProvider.MeterProvider)
+		} else {
+			biz, err = metrics.NewBusiness(nil)
+		}
+		if err != nil {
+			log.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
 		}
 	}
 
@@ -74,8 +114,8 @@ func run() int {
 	}
 
 	repo := postgres.NewAvatarRepository(pgPool.Pgx())
-	queueJobs := usecase.NewAvatarQueueJobs(log, repo, s3Client, thumbs)
-	proc := worker.NewProcessor(log, queueJobs, cfg.RabbitMQ)
+	queueJobs := usecase.NewAvatarQueueJobs(log, repo, s3Client, thumbs, biz)
+	proc := worker.NewProcessor(log, queueJobs, cfg.RabbitMQ, biz)
 
 	app, err := worker.NewApp(ctx, log, proc, cfg.RabbitMQ)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/metrics"
 	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	"govatars/internal/repository/rabbitmq"
@@ -38,6 +39,7 @@ func New(
 	cfg *config.App,
 	otelMetricsProvider *otelpkg.OTELMetricsProvider,
 	otelTracerProvider *otelpkg.OTELTracerProvider,
+	biz *metrics.Business,
 ) (*App, error) {
 	pgPool, err := postgres.New(ctx, cfg.Postgres)
 	if err != nil {
@@ -69,7 +71,7 @@ func New(
 	avatarRepo := postgres.NewAvatarRepository(pgPool.Pgx())
 	healthUC := usecase.NewHealth(pgPool, s3Client, pub)
 	//nolint:contextcheck // Constructor reads placeholder file synchronously; warns are intentionally not request-scoped.
-	avatarUC := usecase.NewAvatarService(avatarRepo, s3Client, pub, cfg, thumbs, log)
+	avatarUC := usecase.NewAvatarService(avatarRepo, s3Client, pub, cfg, thumbs, log, biz)
 
 	prewarmCtx, prewarmCancel := context.WithTimeout(ctx, placeholderPrewarmTimeout)
 	if err := avatarUC.EnsurePlaceholderInS3(prewarmCtx); err != nil {

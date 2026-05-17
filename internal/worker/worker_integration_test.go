@@ -130,8 +130,8 @@ func (s *WorkerAppSuite) SetupSuite() {
 		s.Require().NoError(err)
 	}
 
-	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.s3Client, cat)
-	proc := worker.NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg)
+	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.s3Client, cat, nil)
+	proc := worker.NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg, nil)
 
 	appCtx, cancel := context.WithCancel(context.Background())
 	s.appCancel = cancel

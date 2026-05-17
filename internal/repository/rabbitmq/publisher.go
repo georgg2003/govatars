@@ -8,9 +8,14 @@ import (
 	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/usecase"
 )
 
@@ -99,21 +104,40 @@ func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageI
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	ctx, span := otel.Tracer(otelpkg.ScopeRabbitMQ).Start(ctx, "rabbitmq.publish")
+	defer span.End()
+	span.SetAttributes(
+		semconv.MessagingSystemKey.String("rabbitmq"),
+		attribute.String("messaging.destination", routingKey),
+		attribute.String("messaging.rabbitmq.routing_key", routingKey),
+	)
+
 	b, err := json.Marshal(body)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	headers := amqp.Table{}
+	otel.GetTextMapPropagator().Inject(ctx, otelpkg.HeadersCarrier(headers))
+
 	pub := amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         b,
+		Headers:      headers,
 	}
 	if messageID != "" {
 		pub.MessageId = messageID
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.ch.PublishWithContext(ctx, p.cfg.Exchange, routingKey, false, false, pub)
+	if err := p.ch.PublishWithContext(ctx, p.cfg.Exchange, routingKey, false, false, pub); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	return nil
 }
 
 var _ usecase.EventPublisher = (*Publisher)(nil)

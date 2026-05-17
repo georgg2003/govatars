@@ -13,6 +13,7 @@ import (
 
 	"govatars/internal/models"
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/metrics"
 )
 
 // avatarQueueJobs is the minimal use-case surface the [Processor] invokes after unmarshaling AMQP payloads.
@@ -26,11 +27,12 @@ type Processor struct {
 	log    *slog.Logger
 	jobs   avatarQueueJobs
 	rabbit config.RabbitMQ
+	biz    *metrics.Business
 }
 
 // NewProcessor wires a pre-built avatar queue use case with RabbitMQ retry settings.
-func NewProcessor(log *slog.Logger, jobs avatarQueueJobs, rabbit config.RabbitMQ) *Processor {
-	return &Processor{log: log, jobs: jobs, rabbit: rabbit}
+func NewProcessor(log *slog.Logger, jobs avatarQueueJobs, rabbit config.RabbitMQ, biz *metrics.Business) *Processor {
+	return &Processor{log: log, jobs: jobs, rabbit: rabbit, biz: biz}
 }
 
 // HandleUploadDelivery unmarshals the body, runs upload processing, republishes or DLQ on failure.
@@ -74,8 +76,14 @@ func (p *Processor) republishOrDLQ(ctx context.Context, ch amqpPublisher, d amqp
 		dlqRK = p.rabbit.UploadDLQRoutingKey
 	}
 
+	op := "delete"
+	if upload {
+		op = "upload"
+	}
+
 	rc := retryCountFromHeaders(d.Headers)
 	if len(delays) == 0 || rc >= len(delays) {
+		p.biz.RecordDLQ(ctx, op)
 		return ch.PublishWithContext(ctx, p.rabbit.Exchange, dlqRK, false, false, amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
@@ -95,6 +103,7 @@ func (p *Processor) republishOrDLQ(ctx context.Context, ch amqpPublisher, d amqp
 	maps.Copy(h, d.Headers)
 	h["x-retry-count"] = next
 
+	p.biz.RecordQueueRetry(ctx, op)
 	return ch.PublishWithContext(ctx, "", qname, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,

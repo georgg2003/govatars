@@ -136,7 +136,7 @@ func (s *E2ESuite) SetupSuite() {
 	rootCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 
-	app, err := serverapp.New(rootCtx, logger, s.cfg)
+	app, err := serverapp.New(rootCtx, logger, s.cfg, nil, nil, nil)
 	s.Require().NoError(err)
 	s.app = app
 
@@ -148,8 +148,8 @@ func (s *E2ESuite) SetupSuite() {
 	repo := postgres.NewAvatarRepository(s.app.Postgres.Pgx())
 	cat, err := s.cfg.Avatars.Catalog()
 	s.Require().NoError(err)
-	jobs := usecase.NewAvatarQueueJobs(logger, repo, s.app.S3, cat)
-	proc := worker.NewProcessor(logger, jobs, s.cfg.RabbitMQ)
+	jobs := usecase.NewAvatarQueueJobs(logger, repo, s.app.S3, cat, nil)
+	proc := worker.NewProcessor(logger, jobs, s.cfg.RabbitMQ, nil)
 	wkApp, err := worker.NewApp(rootCtx, logger, proc, s.cfg.RabbitMQ)
 	s.Require().NoError(err)
 	s.wkDone = make(chan struct{})

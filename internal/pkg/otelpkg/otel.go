@@ -49,7 +49,7 @@ func (p *OTELLoggerProvider) Shutdown(ctx context.Context) error {
 }
 
 func (p *OTELLoggerProvider) NewSlogHandler() slog.Handler {
-	return otelslog.NewHandler("govatars", otelslog.WithLoggerProvider(p.loggerProvider))
+	return otelslog.NewHandler(ScopeSlog, otelslog.WithLoggerProvider(p.loggerProvider))
 }
 
 func NewOTELLoggerProvider(

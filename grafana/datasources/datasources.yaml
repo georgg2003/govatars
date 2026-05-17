@@ -17,3 +17,9 @@ datasources:
     editable: true
     jsonData:
       timeInterval: 15s
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    editable: true

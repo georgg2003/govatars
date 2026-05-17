@@ -17,11 +17,16 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	_ "github.com/skrashevich/go-webp" // register WebP decoder for imaging.Decode (uploads may be WebP)
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"govatars/internal/models"
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/imagevalidate"
+	"govatars/internal/pkg/metrics"
+	"govatars/internal/pkg/otelpkg"
 )
 
 var allowedImageMIME = map[string]struct{}{
@@ -50,6 +55,7 @@ type AvatarService struct {
 	thumbSides        map[string]int
 	imageCacheControl string
 	log               *slog.Logger
+	biz               *metrics.Business
 }
 
 // NewAvatarService wires repositories and messaging.
@@ -65,6 +71,7 @@ func NewAvatarService(
 	cfg *config.App,
 	thumbs config.ThumbnailCatalog,
 	log *slog.Logger,
+	biz *metrics.Business,
 ) *AvatarService {
 	icc := strings.TrimSpace(cfg.Avatars.ImageCacheControl)
 	if icc == "" {
@@ -81,6 +88,7 @@ func NewAvatarService(
 		thumbSides:        thumbs.Sides,
 		imageCacheControl: icc,
 		log:               log,
+		biz:               biz,
 	}
 
 	s.ph = newAvatarPlaceholder(
@@ -104,6 +112,10 @@ type UploadResult struct {
 
 // Upload stores the original in S3, inserts metadata, and publishes a processing event.
 func (s *AvatarService) Upload(ctx context.Context, userID string, filename string, r io.Reader) (*UploadResult, error) {
+	ctx, span := otel.Tracer(otelpkg.ScopeUsecase).Start(ctx, "avatar.upload")
+	defer span.End()
+	span.SetAttributes(attribute.String("user_id", userID))
+
 	maxBytes := s.maxUploadBytes
 	if maxBytes <= 0 {
 		maxBytes = 10 * 1024 * 1024
@@ -166,6 +178,8 @@ func (s *AvatarService) Upload(ctx context.Context, userID string, filename stri
 
 	ev := models.AvatarUploadEvent{AvatarID: id.String(), UserID: userID, S3Key: key}
 	if err := s.pub.PublishJSON(ctx, s.rabbit.UploadRoutingKey, id.String(), ev); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if delErr := s.repo.DeleteHard(ctx, id); delErr != nil {
 			s.log.WarnContext(ctx, "upload rollback: delete row after publish failure", "avatar_id", id, "err", delErr)
 		}
@@ -174,6 +188,9 @@ func (s *AvatarService) Upload(ctx context.Context, userID string, filename stri
 		}
 		return nil, err
 	}
+
+	s.biz.RecordAvatarUpload(ctx)
+	span.SetAttributes(attribute.String("avatar_id", id.String()))
 
 	return &UploadResult{
 		ID:        id,
@@ -434,17 +451,29 @@ func (s *AvatarService) DeleteLatestForUser(ctx context.Context, actorUserID, pa
 }
 
 func (s *AvatarService) deleteAvatarWithPublish(ctx context.Context, a *models.Avatar) error {
+	ctx, span := otel.Tracer(otelpkg.ScopeUsecase).Start(ctx, "avatar.delete")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("avatar_id", a.ID.String()),
+		attribute.String("user_id", a.UserID),
+	)
+
 	keys := a.AllObjectKeys()
 	if err := s.repo.SoftDelete(ctx, a.ID, a.UserID); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	ev := models.AvatarDeleteEvent{AvatarID: a.ID.String(), S3Keys: keys}
 	if err := s.pub.PublishJSON(ctx, s.rabbit.DeleteRoutingKey, a.ID.String(), ev); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if rollbackErr := s.repo.RestoreSoftDeleted(ctx, a.ID, a.UserID); rollbackErr != nil {
 			return errors.Join(err, apperr.Wrap(rollbackErr, "restore soft-delete"))
 		}
 		return err
 	}
+	s.biz.RecordAvatarDelete(ctx)
 	return nil
 }
 

@@ -167,10 +167,13 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - loki
+      - prometheus
+      - jaeger
     restart: unless-stopped
 
   node_exporter:
