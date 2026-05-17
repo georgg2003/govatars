@@ -58,12 +58,12 @@ rabbitmq:
   delete_retry_delays_ms: [1000, 5000, 15000]
 
 otel:
-  enabled: false
+  enabled: true
   resource:
     service_name: govatars_server
     service_version: 1.0.0
   logger_provider:
-    enabled: false
+    enabled: true
     endpoint: otel-collector:4317
     insecure: true
     timeout: 10s
@@ -71,14 +71,14 @@ otel:
     batch_timeout: 10s
     shutdown_timeout: 10s
   metrics_provider:
-    enabled: false
+    enabled: true
     endpoint: otel-collector:4317
     insecure: true
     timeout: 10s
     interval: 10s
     shutdown_timeout: 10s
   tracer_provider:
-    enabled: false
+    enabled: true
     endpoint: otel-collector:4317
     insecure: true
     timeout: 10s

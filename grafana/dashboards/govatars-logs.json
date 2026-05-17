@@ -26,7 +26,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)error\" [$__rate_interval])) * 60",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"ERROR\" [$__auto])) * 60",
           "refId": "A"
         }
       ]
@@ -44,7 +44,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)warn\" [$__rate_interval])) * 60",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"WARN\" [$__auto])) * 60",
           "refId": "A"
         }
       ]
@@ -59,7 +59,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate({service_name=~\"$service\"} [$__rate_interval])) * 60",
+          "expr": "sum(rate({service_name=~\"$service\"} [$__auto])) * 60",
           "refId": "A"
         }
       ]
@@ -73,23 +73,23 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)error\" [$__rate_interval]))",
-          "legendFormat": "error",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"ERROR\" [$__auto]))",
+          "legendFormat": "ERROR",
           "refId": "A"
         },
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)warn\" [$__rate_interval]))",
-          "legendFormat": "warn",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"WARN\" [$__auto]))",
+          "legendFormat": "WARN",
           "refId": "B"
         },
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)info\" [$__rate_interval]))",
-          "legendFormat": "info",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"INFO\" [$__auto]))",
+          "legendFormat": "INFO",
           "refId": "C"
         },
         {
-          "expr": "sum(rate({service_name=~\"$service\"} | json | level=~\"(?i)debug\" [$__rate_interval]))",
-          "legendFormat": "debug",
+          "expr": "sum(rate({service_name=~\"$service\"} | severity_text=\"DEBUG\" [$__auto]))",
+          "legendFormat": "DEBUG",
           "refId": "D"
         }
       ]
@@ -103,7 +103,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum by (service_name) (rate({service_name=~\"$service\"} [$__rate_interval]))",
+          "expr": "sum by (service_name) (rate({service_name=~\"$service\"} [$__auto]))",
           "legendFormat": "{{service_name}}",
           "refId": "A"
         }
@@ -118,7 +118,7 @@
         "enableLogDetails": true,
         "prettifyLogMessage": false,
         "showCommonLabels": false,
-        "showLabels": false,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
@@ -127,7 +127,7 @@
       "type": "logs",
       "targets": [
         {
-          "expr": "{service_name=~\"$service\"} | json | level=~\"$level\" | trace_id=~\"$trace_id\" | request_id=~\"$request_id\" |~ \"$search\" | line_format \"{{if .trace_id}}trace_id={{.trace_id}} {{end}}{{if .request_id}}request_id={{.request_id}} {{end}}{{if .user_id}}user_id={{.user_id}} {{end}}{{.msg}}\"",
+          "expr": "{service_name=~\"$service\"} | severity_text=~\"$level\" | trace_id=~\".*$trace_id.*\" | request_id=~\".*$request_id.*\" |~ \".*$search.*\"",
           "refId": "A"
         }
       ]
@@ -139,6 +139,7 @@
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
@@ -147,7 +148,7 @@
       "type": "logs",
       "targets": [
         {
-          "expr": "{service_name=~\"govatars_server\"} | json | msg=~\"request completed\" | level=~\"$level\" | trace_id=~\"$trace_id\" | request_id=~\"$request_id\" | line_format \"{{.method}} {{.path}} status={{.status}} latency={{.latency}} request_id={{.request_id}} trace_id={{.trace_id}}\"",
+          "expr": "{service_name=~\"govatars_server\"} |= \"request completed\" | severity_text=~\"$level\" | trace_id=~\".*$trace_id.*\" | request_id=~\".*$request_id.*\"",
           "refId": "A"
         }
       ]
@@ -159,6 +160,7 @@
       "options": {
         "dedupStrategy": "none",
         "enableLogDetails": true,
+        "showLabels": true,
         "showTime": true,
         "sortOrder": "Descending",
         "wrapLogMessage": true
@@ -167,7 +169,7 @@
       "type": "logs",
       "targets": [
         {
-          "expr": "{service_name=~\"$service\"} | json | level=~\"(?i)(error|warn)\" | trace_id=~\"$trace_id\" | line_format \"[{{.level}}] {{.msg}} trace_id={{.trace_id}}\"",
+          "expr": "{service_name=~\"$service\"} | severity_text=~\"ERROR|WARN\" | trace_id=~\".*$trace_id.*\"",
           "refId": "A"
         }
       ]
@@ -178,19 +180,21 @@
   "templating": {
     "list": [
       {
+        "allValue": "govatars.*",
         "current": { "selected": true, "text": "All", "value": "$__all" },
         "datasource": { "type": "loki", "uid": "loki" },
-        "definition": "label_values({service_name=~\"govatars.*\"}, service_name)",
+        "definition": "label_values(service_name)",
         "includeAll": true,
         "label": "Service",
         "multi": true,
         "name": "service",
-        "query": "label_values({service_name=~\"govatars.*\"}, service_name)",
+        "query": "label_values(service_name)",
         "refresh": 2,
+        "regex": "/govatars.*/",
         "type": "query"
       },
       {
-        "allValue": ".*",
+        "allValue": "INFO|WARN|ERROR|DEBUG",
         "current": { "selected": true, "text": "All", "value": "$__all" },
         "includeAll": true,
         "label": "Level",
@@ -198,16 +202,15 @@
         "name": "level",
         "options": [
           { "selected": true, "text": "All", "value": "$__all" },
-          { "selected": false, "text": "error", "value": "ERROR|error" },
-          { "selected": false, "text": "warn", "value": "WARN|warn|warning" },
-          { "selected": false, "text": "info", "value": "INFO|info" },
-          { "selected": false, "text": "debug", "value": "DEBUG|debug" }
+          { "selected": false, "text": "ERROR", "value": "ERROR" },
+          { "selected": false, "text": "WARN", "value": "WARN" },
+          { "selected": false, "text": "INFO", "value": "INFO" },
+          { "selected": false, "text": "DEBUG", "value": "DEBUG" }
         ],
-        "query": "error,warn,info,debug",
+        "query": "ERROR,WARN,INFO,DEBUG",
         "type": "custom"
       },
       {
-        "allValue": ".*",
         "current": { "text": "", "value": "" },
         "label": "Trace ID",
         "name": "trace_id",
@@ -216,7 +219,6 @@
         "type": "textbox"
       },
       {
-        "allValue": ".*",
         "current": { "text": "", "value": "" },
         "label": "Request ID",
         "name": "request_id",
@@ -225,7 +227,6 @@
         "type": "textbox"
       },
       {
-        "allValue": ".*",
         "current": { "text": "", "value": "" },
         "label": "Search",
         "name": "search",
@@ -240,5 +241,5 @@
   "timezone": "browser",
   "title": "Govatars Logs",
   "uid": "govatars-logs",
-  "version": 1
+  "version": 3
 }

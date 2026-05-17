@@ -2,18 +2,18 @@
 
 Stack in `docker compose`: **OpenTelemetry Collector** → **Jaeger** (traces), **Prometheus** (metrics), **Loki** (logs), **Grafana** (UI).
 
-Enable in Compose via `GOVATARS_OTEL_ENABLED=true` on `server` and `worker`. Local runs without Compose keep `otel.enabled: false` in `config/config.yaml`.
-
 HTTP middleware (`otelecho`) runs when `otel.enabled` and **either** `tracer_provider.enabled` or `metrics_provider.enabled` (RED metrics for Grafana). Postgres (`otelpgx`) and distributed traces need `tracer_provider.enabled`. Logs use `logger_provider.enabled`.
 
 ## Ports
 
-| Service    | URL |
-|-----------|-----|
-| Grafana   | http://localhost:3000 |
-| Jaeger UI | http://localhost:16686 |
-| Prometheus | http://localhost:9090 |
-| Loki      | http://localhost:3100 |
+
+| Service    | URL                                              |
+| ---------- | ------------------------------------------------ |
+| Grafana    | [http://localhost:3000](http://localhost:3000)   |
+| Jaeger UI  | [http://localhost:16686](http://localhost:16686) |
+| Prometheus | [http://localhost:9090](http://localhost:9090)   |
+| Loki       | [http://localhost:3100](http://localhost:3100)   |
+
 
 ## End-to-end trace (acceptance check)
 
@@ -25,9 +25,9 @@ Expected spans in **one** trace:
 
 - HTTP request (`otelecho`)
 - `avatar.upload` → `rabbitmq.publish`
-- `rabbitmq.process` → `avatar.process_upload` → `s3.*` / Postgres (`otelpgx`)
+- `rabbitmq.process` → `avatar.process_upload` → `s3.`* / Postgres (`otelpgx`)
 
-## Logs (Loki — ELK-equivalent workflow)
+## Logs (Loki)
 
 Logs are structured JSON with `trace_id`, `span_id`, `request_id`, `user_id` (HTTP), `level`, `msg`.
 
@@ -38,17 +38,7 @@ Logs are structured JSON with `trace_id`, `span_id`, `request_id`, `user_id` (HT
 3. Example LogQL:
 
 ```logql
-{service_name="govatars_server"} | json | trace_id="<paste-trace-id>"
-```
-
-```logql
-{service_name="govatars_worker"} | json | trace_id="<paste-trace-id>"
-```
-
-Filter by request:
-
-```logql
-{service_name="govatars_server"} | json | request_id="<x-request-id>"
+{service_name="govatars_server"} | trace_id="<paste-trace-id>"
 ```
 
 ## Metrics (Prometheus + Grafana)
@@ -62,10 +52,3 @@ Quick check:
 ```bash
 curl -s 'http://localhost:9090/api/v1/query?query=govatars_avatar_uploads_total'
 ```
-
-## Self-check before review
-
-- [ ] Jaeger: one upload → single trace with HTTP + queue + worker + S3/DB spans
-- [ ] Loki: same `trace_id` on server and worker log lines
-- [ ] Grafana dashboard: HTTP rate/latency and business panels non-empty after traffic
-- [ ] Prometheus: business counters increase after upload/delete
