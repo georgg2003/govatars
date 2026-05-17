@@ -248,7 +248,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.upload_consumer_tag", "govatars-upload")
 	v.SetDefault("rabbitmq.delete_consumer_tag", "govatars-delete")
 
-	v.SetDefault("otel.enabled", true)
+	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.resource.service_name", "govatars")
 	v.SetDefault("otel.resource.service_version", "1.0.0")
 

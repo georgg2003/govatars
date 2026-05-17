@@ -24,8 +24,11 @@ func NewServerLogger(level slog.Level) *slog.Logger {
 	return slog.New(&ContextHandler{Handler: newBaseHandler(os.Stderr, level)})
 }
 
-func NewOTELServerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider) *slog.Logger {
-	return slog.New(&ContextHandler{Handler: otelLoggerProvider.NewSlogHandler()})
+// NewOTELServerLogger exports logs to OTLP and mirrors JSON logs to stderr at level.
+func NewOTELServerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider, level slog.Level) *slog.Logger {
+	otelH := newLevelHandler(otelLoggerProvider.NewSlogHandler(), level)
+	stderrH := newBaseHandler(os.Stderr, level)
+	return slog.New(&ContextHandler{Handler: newMultiHandler(otelH, stderrH)})
 }
 
 // NewWorkerLogger returns a logger for the worker process: JSON to stderr without HTTP request enrichment (no [ContextHandler]).
@@ -33,8 +36,11 @@ func NewWorkerLogger(level slog.Level) *slog.Logger {
 	return slog.New(newBaseHandler(os.Stderr, level))
 }
 
-func NewOTELWorkerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider) *slog.Logger {
-	return slog.New(otelLoggerProvider.NewSlogHandler())
+// NewOTELWorkerLogger exports logs to OTLP and mirrors JSON logs to stderr at level.
+func NewOTELWorkerLogger(otelLoggerProvider *otelpkg.OTELLoggerProvider, level slog.Level) *slog.Logger {
+	otelH := newLevelHandler(otelLoggerProvider.NewSlogHandler(), level)
+	stderrH := newBaseHandler(os.Stderr, level)
+	return slog.New(newMultiHandler(otelH, stderrH))
 }
 
 // DiscardLogger returns a logger that discards all records. Use as the default for optional loggers (e.g. functional options).

@@ -30,7 +30,8 @@ func run() int {
 		return 1
 	}
 
-	log := logging.NewWorkerLogger(logging.LevelFromString(cfg.Logging.Level))
+	logLevel := logging.LevelFromString(cfg.Logging.Level)
+	log := logging.NewWorkerLogger(logLevel)
 	if cfg.OTEL.Enabled {
 		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
 		if err != nil {
@@ -43,7 +44,13 @@ func run() int {
 				log.ErrorContext(ctx, "otel logger provider init failed", "err", err)
 				return 1
 			}
-			log = logging.NewOTELWorkerLogger(otelLoggerProvider)
+			defer func() {
+				shutdownCtx := context.WithoutCancel(ctx)
+				if err := otelLoggerProvider.Shutdown(shutdownCtx); err != nil {
+					log.ErrorContext(shutdownCtx, "otel logger provider shutdown failed", "err", err)
+				}
+			}()
+			log = logging.NewOTELWorkerLogger(otelLoggerProvider, logLevel)
 		}
 	}
 
