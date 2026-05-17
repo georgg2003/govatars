@@ -30,7 +30,7 @@ func run() int {
 	}
 	logger := logging.NewServerLogger(logging.LevelFromString(cfg.Logging.Level))
 	var otelMetricsProvider *otelpkg.OTELMetricsProvider
-
+	var otelTracerProvider *otelpkg.OTELTracerProvider
 	if cfg.OTEL.Enabled {
 		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
 		if err != nil {
@@ -43,7 +43,11 @@ func run() int {
 				logger.ErrorContext(ctx, "otel logger provider init failed", "err", err)
 				return 1
 			}
-			defer otelLoggerProvider.Shutdown(ctx)
+			defer func() {
+				if err := otelLoggerProvider.Shutdown(ctx); err != nil {
+					logger.ErrorContext(ctx, "otel logger provider shutdown failed", "err", err)
+				}
+			}()
 			logger = logging.NewOTELServerLogger(otelLoggerProvider)
 		}
 		if cfg.OTEL.OTELMetricsProvider.Enabled {
@@ -53,11 +57,33 @@ func run() int {
 				logger.ErrorContext(ctx, "otel metrics provider init failed", "err", err)
 				return 1
 			}
-			defer otelMetricsProvider.Shutdown(ctx)
+			defer func() {
+				if err := otelMetricsProvider.Shutdown(ctx); err != nil {
+					logger.ErrorContext(ctx, "otel metrics provider shutdown failed", "err", err)
+				}
+			}()
+		}
+		if cfg.OTEL.OTELTracerProvider.Enabled {
+			otelTracerProvider, err := otelpkg.NewOTELTracerProvider(ctx, res, cfg.OTEL.OTELTracerProvider)
+			if err != nil {
+				logger.ErrorContext(ctx, "otel tracer provider init failed", "err", err)
+				return 1
+			}
+			defer func() {
+				if err := otelTracerProvider.Shutdown(ctx); err != nil {
+					logger.ErrorContext(ctx, "otel tracer provider shutdown failed", "err", err)
+				}
+			}()
 		}
 	}
 
-	application, err := serverapp.New(ctx, logger, cfg, otelMetricsProvider)
+	application, err := serverapp.New(
+		ctx,
+		logger,
+		cfg,
+		otelMetricsProvider,
+		otelTracerProvider,
+	)
 	if err != nil {
 		logger.ErrorContext(ctx, "app init failed", "err", err)
 		return 1

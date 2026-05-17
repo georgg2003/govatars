@@ -28,6 +28,7 @@ type App struct {
 	Health              *usecase.Health
 	Avatar              *usecase.AvatarService
 	OTELMetricsProvider *otelpkg.OTELMetricsProvider
+	OTELTracerProvider  *otelpkg.OTELTracerProvider
 }
 
 // New opens Postgres, S3, and RabbitMQ publisher, then builds use cases.
@@ -36,6 +37,7 @@ func New(
 	log *slog.Logger,
 	cfg *config.App,
 	otelMetricsProvider *otelpkg.OTELMetricsProvider,
+	otelTracerProvider *otelpkg.OTELTracerProvider,
 ) (*App, error) {
 	pgPool, err := postgres.New(ctx, cfg.Postgres)
 	if err != nil {
@@ -84,6 +86,7 @@ func New(
 		Health:              healthUC,
 		Avatar:              avatarUC,
 		OTELMetricsProvider: otelMetricsProvider,
+		OTELTracerProvider:  otelTracerProvider,
 	}, nil
 }
 

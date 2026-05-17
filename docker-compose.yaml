@@ -131,7 +131,7 @@ services:
     restart: unless-stopped
 
   otel-collector:
-    image: otel/opentelemetry-collector:0.143.0
+    image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
     ports:
       - "8889:8889"
@@ -141,8 +141,16 @@ services:
       - "--config=/etc/otel-collector-config.yml"
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yml:ro
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:13133']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       - loki
+      - prometheus
+      - jaeger
     restart: unless-stopped
 
   loki:
@@ -196,6 +204,13 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+    
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    restart: always
+    ports:
+      - '16686:16686' # UI Jaeger
 
 volumes:
   govatars_pg:

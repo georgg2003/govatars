@@ -32,12 +32,23 @@ func Run(ctx context.Context, application *serverapp.App) error {
 
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(
-		otelecho.Middleware(
-			"govatars",
-			otelecho.WithMeterProvider(application.OTELMetricsProvider.MeterProvider),
-		),
-	)
+
+	if application.OTELTracerProvider != nil {
+		e.Use(
+			otelecho.Middleware(
+				"govatars",
+				otelecho.WithTracerProvider(application.OTELTracerProvider.TracerProvider),
+			),
+		)
+	}
+	if application.OTELMetricsProvider != nil {
+		e.Use(
+			otelecho.Middleware(
+				"govatars",
+				otelecho.WithMeterProvider(application.OTELMetricsProvider.MeterProvider),
+			),
+		)
+	}
 	e.Use(middleware.RequestID())
 	e.Use(srvmw.RequestUserID())
 	e.Use(srvmw.RequestContext())

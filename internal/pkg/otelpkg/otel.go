@@ -10,9 +10,11 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 )
 
@@ -125,4 +127,50 @@ func NewOTELMetricsProvider(
 		),
 	)
 	return &OTELMetricsProvider{MeterProvider: provider, shutdownTimeout: shutdownTimeout}, nil
+}
+
+type OTELTracerProvider struct {
+	TracerProvider  *sdktrace.TracerProvider
+	shutdownTimeout time.Duration
+}
+
+func (p *OTELTracerProvider) Shutdown(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, p.shutdownTimeout)
+	defer cancel()
+	if err := p.TracerProvider.Shutdown(ctx); err != nil {
+		return apperr.Wrap(err, "failed to shutdown tracer provider")
+	}
+	return nil
+}
+func NewOTELTracerProvider(
+	ctx context.Context,
+	res *resource.Resource,
+	cfg config.OTELTracerProvider,
+) (*OTELTracerProvider, error) {
+	opts := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(cfg.Endpoint),
+		otlptracegrpc.WithTimeout(cfg.Timeout),
+	}
+	if cfg.Insecure {
+		opts = append(opts, otlptracegrpc.WithInsecure())
+	}
+	otlpTraceExporter, err := otlptracegrpc.New(ctx, opts...)
+	if err != nil {
+		return nil, apperr.Wrap(err, "failed to create OTLP trace exporter")
+	}
+	shutdownTimeout := 5 * time.Second
+	if cfg.ShutdownTimeout > 0 {
+		shutdownTimeout = cfg.ShutdownTimeout
+	}
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithSpanProcessor(
+			sdktrace.NewBatchSpanProcessor(
+				otlpTraceExporter,
+				sdktrace.WithExportTimeout(cfg.BatchTimeout),
+				sdktrace.WithMaxExportBatchSize(cfg.BatchSize),
+			),
+		),
+	)
+	return &OTELTracerProvider{TracerProvider: provider, shutdownTimeout: shutdownTimeout}, nil
 }

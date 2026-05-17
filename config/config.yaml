@@ -62,7 +62,7 @@ otel:
   resource:
     service_name: govatars_server
     service_version: 1.0.0
-  otel_logger_provider:
+  logger_provider:
     enabled: true
     endpoint: otel-collector:4317
     insecure: true
@@ -70,10 +70,18 @@ otel:
     batch_size: 100
     batch_timeout: 10s
     shutdown_timeout: 10s
-  otel_metrics_provider:
+  metrics_provider:
     enabled: true
     endpoint: otel-collector:4317
     insecure: true
     timeout: 10s
     interval: 10s
+    shutdown_timeout: 10s
+  tracer_provider:
+    enabled: true
+    endpoint: otel-collector:4317
+    insecure: true
+    timeout: 10s
+    batch_size: 100
+    batch_timeout: 10s
     shutdown_timeout: 10s
