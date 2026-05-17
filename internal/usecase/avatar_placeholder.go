@@ -38,6 +38,7 @@ func (p *avatarPlaceholder) configured() bool {
 // newAvatarPlaceholder reads path when non-empty, validates image bytes, and builds the S3 key map
 // for all thumbnail labels (keys exist even when no file loads, so routing stays consistent).
 func newAvatarPlaceholder(
+	ctx context.Context,
 	log *slog.Logger,
 	path string,
 	thumbLabels []string,
@@ -50,7 +51,6 @@ func newAvatarPlaceholder(
 	if path == "" {
 		return empty()
 	}
-	ctx := context.Background()
 	b, err := os.ReadFile(path) //nolint:gosec // path is operator-controlled; staticDir is documented to host only public assets
 	if err != nil {
 		log.WarnContext(ctx, "placeholder read failed", "path", path, "err", err)

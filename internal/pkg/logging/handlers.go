@@ -8,6 +8,7 @@ import (
 // levelHandler drops records below minLevel before delegating to the inner handler.
 type levelHandler struct {
 	slog.Handler
+
 	minLevel slog.Level
 }
 

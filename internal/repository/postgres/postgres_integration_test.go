@@ -42,7 +42,7 @@ func (s *PostgresRepoSuite) SetupSuite() {
 
 	var pool *postgres.Pool
 	s.Require().Eventually(func() bool {
-		pool, err = postgres.New(ctx, config.Postgres{DSN: dsn})
+		pool, err = postgres.New(ctx, config.Postgres{DSN: dsn}, false)
 		return err == nil
 	}, 20*time.Second, 300*time.Millisecond, "postgres container is not ready: %v", err)
 	s.pool = pool

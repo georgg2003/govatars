@@ -80,7 +80,7 @@ func (s *WorkerAppSuite) SetupSuite() {
 	dsn, err := pg.ConnectionString(ctx, "sslmode=disable")
 	s.Require().NoError(err)
 	s.Require().Eventually(func() bool {
-		s.pool, err = postgres.New(ctx, config.Postgres{DSN: dsn})
+		s.pool, err = postgres.New(ctx, config.Postgres{DSN: dsn}, false)
 		return err == nil
 	}, 20*time.Second, 300*time.Millisecond, "postgres container is not ready: %v", err)
 	s.applyMigrations(ctx)

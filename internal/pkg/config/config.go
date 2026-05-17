@@ -134,6 +134,21 @@ type OTEL struct {
 	OTELTracerProvider  OTELTracerProvider  `mapstructure:"tracer_provider"`
 }
 
+// TracingEnabled reports whether trace export and DB instrumentation (otelpgx) are active.
+func (o OTEL) TracingEnabled() bool {
+	return o.Enabled && o.OTELTracerProvider.Enabled
+}
+
+// MetricsEnabled reports whether OTLP metrics and business counters are exported.
+func (o OTEL) MetricsEnabled() bool {
+	return o.Enabled && o.OTELMetricsProvider.Enabled
+}
+
+// HTTPInstrumentationEnabled reports whether otelecho HTTP middleware should run (traces and/or RED metrics).
+func (o OTEL) HTTPInstrumentationEnabled() bool {
+	return o.TracingEnabled() || o.MetricsEnabled()
+}
+
 type OTELLoggerProvider struct {
 	Enabled         bool          `mapstructure:"enabled"`
 	Endpoint        string        `mapstructure:"endpoint"`

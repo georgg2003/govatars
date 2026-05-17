@@ -8,14 +8,9 @@ import (
 	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	semconv "go.opentelemetry.io/otel/semconv/v1.20.0"
 
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
-	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/usecase"
 )
 
@@ -62,12 +57,12 @@ func NewPublisher(ctx context.Context, log *slog.Logger, cfg config.RabbitMQ) (*
 }
 
 // Close releases the channel and connection.
-func (p *Publisher) Close() error {
+func (p *Publisher) Close(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ch != nil {
 		if err := p.ch.Close(); err != nil {
-			p.log.WarnContext(context.Background(), "rabbitmq channel close", "err", err)
+			p.log.WarnContext(ctx, "rabbitmq channel close", "err", err)
 		}
 	}
 	if p.conn != nil {
@@ -101,43 +96,21 @@ func (p *Publisher) Health(ctx context.Context) error {
 
 // PublishJSON sends a persistent JSON message with optional AMQP message id (idempotency hint).
 func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageID string, body any) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	ctx, span := otel.Tracer(otelpkg.ScopeRabbitMQ).Start(ctx, "rabbitmq.publish")
-	defer span.End()
-	span.SetAttributes(
-		semconv.MessagingSystemKey.String("rabbitmq"),
-		attribute.String("messaging.destination", routingKey),
-		attribute.String("messaging.rabbitmq.routing_key", routingKey),
-	)
-
 	b, err := json.Marshal(body)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	headers := amqp.Table{}
-	otel.GetTextMapPropagator().Inject(ctx, otelpkg.HeadersCarrier(headers))
-
 	pub := amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         b,
-		Headers:      headers,
 	}
 	if messageID != "" {
 		pub.MessageId = messageID
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if err := p.ch.PublishWithContext(ctx, p.cfg.Exchange, routingKey, false, false, pub); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	return nil
+	return PublishWithContext(ctx, p.ch, p.cfg.Exchange, routingKey, pub)
 }
 
 var _ usecase.EventPublisher = (*Publisher)(nil)

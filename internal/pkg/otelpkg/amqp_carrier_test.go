@@ -36,6 +36,6 @@ func TestAMQPCarrier_roundTrip(t *testing.T) {
 	require.Equal(t, span.SpanContext().TraceID(), traceIDFrom(childCtx))
 }
 
-func traceIDFrom(ctx context.Context) interface{} {
+func traceIDFrom(ctx context.Context) any {
 	return trace.SpanFromContext(ctx).SpanContext().TraceID()
 }

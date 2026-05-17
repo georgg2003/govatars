@@ -65,6 +65,7 @@ type AvatarService struct {
 //   - unsupported / undecodable image -> Warn, no placeholder configured;
 //   - on success: content-type is detected from bytes, decoded image is cached, and S3 keys are derived.
 func NewAvatarService(
+	ctx context.Context,
 	repo AvatarRepository,
 	store ObjectStorage,
 	pub EventPublisher,
@@ -92,6 +93,7 @@ func NewAvatarService(
 	}
 
 	s.ph = newAvatarPlaceholder(
+		ctx,
 		log,
 		cfg.HTTP.PlaceholderPath,
 		thumbs.Labels,

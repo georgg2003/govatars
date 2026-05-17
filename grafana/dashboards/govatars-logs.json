@@ -14,7 +14,7 @@
   ],
   "panels": [
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "red", "value": null }] } },
         "overrides": []
@@ -32,7 +32,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "orange", "value": null }] } },
         "overrides": []
@@ -50,7 +50,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 4, "w": 12, "x": 12, "y": 0 },
       "id": 3,
@@ -65,7 +65,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 4 },
       "id": 4,
@@ -95,7 +95,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 7, "w": 12, "x": 12, "y": 4 },
       "id": 5,
@@ -110,7 +110,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "gridPos": { "h": 14, "w": 24, "x": 0, "y": 11 },
       "id": 6,
       "options": {
@@ -133,7 +133,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 25 },
       "id": 7,
       "options": {
@@ -153,7 +153,7 @@
       ]
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 25 },
       "id": 8,
       "options": {
@@ -179,7 +179,7 @@
     "list": [
       {
         "current": { "selected": true, "text": "All", "value": "$__all" },
-        "datasource": { "type": "loki", "uid": "Loki" },
+        "datasource": { "type": "loki", "uid": "loki" },
         "definition": "label_values({service_name=~\"govatars.*\"}, service_name)",
         "includeAll": true,
         "label": "Service",

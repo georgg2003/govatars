@@ -66,6 +66,80 @@ func TestAvatars_Catalog_Defaults(t *testing.T) {
 	}
 }
 
+func TestOTEL_TracingEnabled(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		otel   config.OTEL
+		want   bool
+	}{
+		{"all off", config.OTEL{}, false},
+		{"master only", config.OTEL{Enabled: true}, false},
+		{"tracer only", config.OTEL{Enabled: true, OTELTracerProvider: config.OTELTracerProvider{Enabled: true}}, true},
+		{"metrics only", config.OTEL{Enabled: true, OTELMetricsProvider: config.OTELMetricsProvider{Enabled: true}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.otel.TracingEnabled())
+		})
+	}
+}
+
+func TestOTEL_MetricsEnabled(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		otel config.OTEL
+		want bool
+	}{
+		{"all off", config.OTEL{}, false},
+		{"master only", config.OTEL{Enabled: true}, false},
+		{"metrics only", config.OTEL{Enabled: true, OTELMetricsProvider: config.OTELMetricsProvider{Enabled: true}}, true},
+		{"tracer only", config.OTEL{Enabled: true, OTELTracerProvider: config.OTELTracerProvider{Enabled: true}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.otel.MetricsEnabled())
+		})
+	}
+}
+
+func TestOTEL_HTTPInstrumentationEnabled(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		otel config.OTEL
+		want bool
+	}{
+		{"all off", config.OTEL{}, false},
+		{"logger only", config.OTEL{
+			Enabled:            true,
+			OTELLoggerProvider: config.OTELLoggerProvider{Enabled: true},
+		}, false},
+		{"metrics only", config.OTEL{
+			Enabled:             true,
+			OTELMetricsProvider: config.OTELMetricsProvider{Enabled: true},
+		}, true},
+		{"tracer only", config.OTEL{
+			Enabled:            true,
+			OTELTracerProvider: config.OTELTracerProvider{Enabled: true},
+		}, true},
+		{"tracer and metrics", config.OTEL{
+			Enabled:             true,
+			OTELTracerProvider:  config.OTELTracerProvider{Enabled: true},
+			OTELMetricsProvider: config.OTELMetricsProvider{Enabled: true},
+		}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, tt.otel.HTTPInstrumentationEnabled())
+		})
+	}
+}
+
 func TestPostgres_ResolveDSN_FromFields(t *testing.T) {
 	p := config.Postgres{
 		Host:     "db.example",

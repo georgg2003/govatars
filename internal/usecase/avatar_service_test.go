@@ -33,7 +33,7 @@ func (s *AvatarServiceSuite) SetupTest() {
 	s.repo = repomocks.NewMockAvatarRepository(s.ctrl)
 	s.store = repomocks.NewMockObjectStorage(s.ctrl)
 	s.pub = repomocks.NewMockEventPublisher(s.ctrl)
-	s.svc = usecase.NewAvatarService(s.repo, s.store, s.pub, testCfg(), testCatalog(), testDiscardLog(), nil)
+	s.svc = usecase.NewAvatarService(context.Background(), s.repo, s.store, s.pub, testCfg(), testCatalog(), testDiscardLog(), nil)
 }
 
 func (s *AvatarServiceSuite) TestUpload_InvalidBody() {

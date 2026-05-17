@@ -8,7 +8,6 @@ import (
 
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/metrics"
-	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	"govatars/internal/repository/rabbitmq"
 	s3repo "govatars/internal/repository/s3"
@@ -21,15 +20,13 @@ const placeholderPrewarmTimeout = 30 * time.Second
 
 // App holds infrastructure opened for the API server.
 type App struct {
-	Logger              *slog.Logger
-	Cfg                 *config.App
-	Postgres            *postgres.Pool
-	S3                  *s3repo.Client
-	Publisher           *rabbitmq.Publisher
-	Health              *usecase.Health
-	Avatar              *usecase.AvatarService
-	OTELMetricsProvider *otelpkg.OTELMetricsProvider
-	OTELTracerProvider  *otelpkg.OTELTracerProvider
+	Logger    *slog.Logger
+	Cfg       *config.App
+	Postgres  *postgres.Pool
+	S3        *s3repo.Client
+	Publisher *rabbitmq.Publisher
+	Health    *usecase.Health
+	Avatar    *usecase.AvatarService
 }
 
 // New opens Postgres, S3, and RabbitMQ publisher, then builds use cases.
@@ -37,11 +34,9 @@ func New(
 	ctx context.Context,
 	log *slog.Logger,
 	cfg *config.App,
-	otelMetricsProvider *otelpkg.OTELMetricsProvider,
-	otelTracerProvider *otelpkg.OTELTracerProvider,
 	biz *metrics.Business,
 ) (*App, error) {
-	pgPool, err := postgres.New(ctx, cfg.Postgres)
+	pgPool, err := postgres.New(ctx, cfg.Postgres, cfg.OTEL.TracingEnabled())
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +55,7 @@ func New(
 
 	thumbs, err := cfg.Avatars.Catalog()
 	if err != nil {
-		//nolint:contextcheck // rabbitmq.Publisher.Close does not accept context
-		if cerr := pub.Close(); cerr != nil {
+		if cerr := pub.Close(ctx); cerr != nil {
 			log.WarnContext(ctx, "close rabbitmq publisher after catalog error", "err", cerr)
 		}
 		pgPool.Close()
@@ -70,8 +64,7 @@ func New(
 
 	avatarRepo := postgres.NewAvatarRepository(pgPool.Pgx())
 	healthUC := usecase.NewHealth(pgPool, s3Client, pub)
-	//nolint:contextcheck // Constructor reads placeholder file synchronously; warns are intentionally not request-scoped.
-	avatarUC := usecase.NewAvatarService(avatarRepo, s3Client, pub, cfg, thumbs, log, biz)
+	avatarUC := usecase.NewAvatarService(ctx, avatarRepo, s3Client, pub, cfg, thumbs, log, biz)
 
 	prewarmCtx, prewarmCancel := context.WithTimeout(ctx, placeholderPrewarmTimeout)
 	if err := avatarUC.EnsurePlaceholderInS3(prewarmCtx); err != nil {
@@ -80,15 +73,13 @@ func New(
 	prewarmCancel()
 
 	return &App{
-		Logger:              log,
-		Cfg:                 cfg,
-		Postgres:            pgPool,
-		S3:                  s3Client,
-		Publisher:           pub,
-		Health:              healthUC,
-		Avatar:              avatarUC,
-		OTELMetricsProvider: otelMetricsProvider,
-		OTELTracerProvider:  otelTracerProvider,
+		Logger:    log,
+		Cfg:       cfg,
+		Postgres:  pgPool,
+		S3:        s3Client,
+		Publisher: pub,
+		Health:    healthUC,
+		Avatar:    avatarUC,
 	}, nil
 }
 
@@ -101,8 +92,7 @@ func (a *App) Close(ctx context.Context) {
 		return
 	}
 	if a.Publisher != nil {
-		//nolint:contextcheck // rabbitmq.Publisher.Close does not accept context; ctx is used only for the WarnContext below.
-		if err := a.Publisher.Close(); err != nil {
+		if err := a.Publisher.Close(ctx); err != nil {
 			a.Logger.WarnContext(ctx, "publisher close", "err", err)
 		}
 	}

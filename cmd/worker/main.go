@@ -33,58 +33,18 @@ func run() int {
 
 	logLevel := logging.LevelFromString(cfg.Logging.Level)
 	log := logging.NewWorkerLogger(logLevel)
+
 	var biz *metrics.Business
 	if cfg.OTEL.Enabled {
-		res, err := otelpkg.NewResource(ctx, cfg.OTEL.Resource)
+		otel, err := otelpkg.Bootstrap(ctx, cfg.OTEL, logLevel, log, logging.NewOTELWorkerLogger)
 		if err != nil {
-			log.ErrorContext(ctx, "otel resource init failed", "err", err)
+			log.ErrorContext(ctx, "otel bootstrap failed", "err", err)
 			return 1
 		}
-		var otelMetricsProvider *otelpkg.OTELMetricsProvider
-		var otelTracerProvider *otelpkg.OTELTracerProvider
-		if cfg.OTEL.OTELLoggerProvider.Enabled {
-			otelLoggerProvider, err := otelpkg.NewOTELLoggerProvider(ctx, res, cfg.OTEL.OTELLoggerProvider)
-			if err != nil {
-				log.ErrorContext(ctx, "otel logger provider init failed", "err", err)
-				return 1
-			}
-			defer func() {
-				shutdownCtx := context.WithoutCancel(ctx)
-				if err := otelLoggerProvider.Shutdown(shutdownCtx); err != nil {
-					log.ErrorContext(shutdownCtx, "otel logger provider shutdown failed", "err", err)
-				}
-			}()
-			log = logging.NewOTELWorkerLogger(otelLoggerProvider, logLevel)
-		}
-		if cfg.OTEL.OTELMetricsProvider.Enabled {
-			otelMetricsProvider, err = otelpkg.NewOTELMetricsProvider(ctx, res, cfg.OTEL.OTELMetricsProvider)
-			if err != nil {
-				log.ErrorContext(ctx, "otel metrics provider init failed", "err", err)
-				return 1
-			}
-			defer func() {
-				shutdownCtx := context.WithoutCancel(ctx)
-				if err := otelMetricsProvider.Shutdown(shutdownCtx); err != nil {
-					log.ErrorContext(shutdownCtx, "otel metrics provider shutdown failed", "err", err)
-				}
-			}()
-		}
-		if cfg.OTEL.OTELTracerProvider.Enabled {
-			otelTracerProvider, err = otelpkg.NewOTELTracerProvider(ctx, res, cfg.OTEL.OTELTracerProvider)
-			if err != nil {
-				log.ErrorContext(ctx, "otel tracer provider init failed", "err", err)
-				return 1
-			}
-			defer func() {
-				shutdownCtx := context.WithoutCancel(ctx)
-				if err := otelTracerProvider.Shutdown(shutdownCtx); err != nil {
-					log.ErrorContext(shutdownCtx, "otel tracer provider shutdown failed", "err", err)
-				}
-			}()
-		}
-		otelpkg.InstallGlobals(otelTracerProvider, otelMetricsProvider)
-		if otelMetricsProvider != nil {
-			biz, err = metrics.NewBusiness(otelMetricsProvider.MeterProvider)
+		log = otel.Logger
+		defer otel.Shutdown(ctx)
+		if otel.Metrics != nil {
+			biz, err = metrics.NewBusiness(otel.Metrics.MeterProvider)
 		} else {
 			biz, err = metrics.NewBusiness(nil)
 		}
@@ -93,8 +53,15 @@ func run() int {
 			return 1
 		}
 	}
+	if biz == nil {
+		biz, err = metrics.NewBusiness(nil)
+		if err != nil {
+			log.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
+		}
+	}
 
-	pgPool, err := postgres.New(ctx, cfg.Postgres)
+	pgPool, err := postgres.New(ctx, cfg.Postgres, cfg.OTEL.TracingEnabled())
 	if err != nil {
 		log.ErrorContext(ctx, "postgres", "err", err)
 		return 1

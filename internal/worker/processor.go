@@ -14,6 +14,7 @@ import (
 	"govatars/internal/models"
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/metrics"
+	"govatars/internal/repository/rabbitmq"
 )
 
 // avatarQueueJobs is the minimal use-case surface the [Processor] invokes after unmarshaling AMQP payloads.
@@ -84,7 +85,7 @@ func (p *Processor) republishOrDLQ(ctx context.Context, ch amqpPublisher, d amqp
 	rc := retryCountFromHeaders(d.Headers)
 	if len(delays) == 0 || rc >= len(delays) {
 		p.biz.RecordDLQ(ctx, op)
-		return ch.PublishWithContext(ctx, p.rabbit.Exchange, dlqRK, false, false, amqp.Publishing{
+		return rabbitmq.PublishWithContext(ctx, ch, p.rabbit.Exchange, dlqRK, amqp.Publishing{
 			ContentType:  "application/json",
 			DeliveryMode: amqp.Persistent,
 			Body:         d.Body,
@@ -104,7 +105,7 @@ func (p *Processor) republishOrDLQ(ctx context.Context, ch amqpPublisher, d amqp
 	h["x-retry-count"] = next
 
 	p.biz.RecordQueueRetry(ctx, op)
-	return ch.PublishWithContext(ctx, "", qname, false, false, amqp.Publishing{
+	return rabbitmq.PublishWithContext(ctx, ch, "", qname, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Body:         d.Body,

@@ -4,6 +4,8 @@ Stack in `docker compose`: **OpenTelemetry Collector** → **Jaeger** (traces), 
 
 Enable in Compose via `GOVATARS_OTEL_ENABLED=true` on `server` and `worker`. Local runs without Compose keep `otel.enabled: false` in `config/config.yaml`.
 
+HTTP middleware (`otelecho`) runs when `otel.enabled` and **either** `tracer_provider.enabled` or `metrics_provider.enabled` (RED metrics for Grafana). Postgres (`otelpgx`) and distributed traces need `tracer_provider.enabled`. Logs use `logger_provider.enabled`.
+
 ## Ports
 
 | Service    | URL |

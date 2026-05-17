@@ -136,7 +136,7 @@ func (s *E2ESuite) SetupSuite() {
 	rootCtx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 
-	app, err := serverapp.New(rootCtx, logger, s.cfg, nil, nil, nil)
+	app, err := serverapp.New(rootCtx, logger, s.cfg, nil)
 	s.Require().NoError(err)
 	s.app = app
 
@@ -211,7 +211,7 @@ func (s *E2ESuite) applyMigrations(ctx context.Context, dsn string) {
 	var pool *postgres.Pool
 	var err error
 	s.Require().Eventually(func() bool {
-		pool, err = postgres.New(ctx, config.Postgres{DSN: dsn})
+		pool, err = postgres.New(ctx, config.Postgres{DSN: dsn}, false)
 		return err == nil
 	}, 20*time.Second, 300*time.Millisecond, "postgres container is not ready: %v", err)
 	defer pool.Close()

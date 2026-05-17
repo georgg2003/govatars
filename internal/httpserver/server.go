@@ -34,15 +34,8 @@ func Run(ctx context.Context, application *serverapp.App) error {
 	e := echo.New()
 	e.HideBanner = true
 
-	var opts []otelecho.Option
-	if application.OTELTracerProvider != nil {
-		opts = append(opts, otelecho.WithTracerProvider(application.OTELTracerProvider.TracerProvider))
-	}
-	if application.OTELMetricsProvider != nil {
-		opts = append(opts, otelecho.WithMeterProvider(application.OTELMetricsProvider.MeterProvider))
-	}
-	if len(opts) > 0 {
-		e.Use(otelecho.Middleware(otelpkg.ScopeSlog, opts...))
+	if cfg.OTEL.HTTPInstrumentationEnabled() {
+		e.Use(otelecho.Middleware(otelpkg.ScopeSlog))
 	}
 
 	e.Use(middleware.RequestID())
