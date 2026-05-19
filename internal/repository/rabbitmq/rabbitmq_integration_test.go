@@ -72,7 +72,7 @@ func (s *RabbitMQSuite) newPublisher(cfg config.RabbitMQ) *rabbitrepo.Publisher 
 	pub, err := rabbitrepo.NewPublisher(context.Background(), slog.New(slog.DiscardHandler), cfg)
 	s.Require().NoError(err)
 	s.T().Cleanup(func() {
-		if cerr := pub.Close(); cerr != nil {
+		if cerr := pub.Close(context.Background()); cerr != nil {
 			s.T().Logf("publisher close: %v", cerr)
 		}
 	})

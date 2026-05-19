@@ -165,7 +165,7 @@ func (s *WorkerAppSuite) TearDownSuite() {
 		}
 	}
 	if s.publisher != nil {
-		if err := s.publisher.Close(); err != nil {
+		if err := s.publisher.Close(context.Background()); err != nil {
 			s.T().Logf("publisher close: %v", err)
 		}
 	}
@@ -226,7 +226,7 @@ func (s *WorkerAppSuite) TestAppRun_ProcessesUpload() {
 		ID: id, UserID: user, FileName: "a.png", MimeType: "image/png",
 		SizeBytes: int64(len(minPNG)), S3Key: key,
 		ProcessingStatus: models.ProcessingStatusPending,
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:        now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))
 	s.Require().NoError(s.s3Client.PutObject(ctx, key, bytes.NewReader(minPNG), int64(len(minPNG)), "image/png"))
@@ -276,7 +276,7 @@ func (s *WorkerAppSuite) TestAppRun_DLQAfterRetries() {
 		ID: id, UserID: user, FileName: "x.png", MimeType: "image/png",
 		SizeBytes: 0, S3Key: missingKey,
 		ProcessingStatus: models.ProcessingStatusPending,
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:        now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))
 
