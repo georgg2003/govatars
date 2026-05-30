@@ -37,3 +37,36 @@ Selector labels
 app.kubernetes.io/name: {{ include "govatars.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Postgres DSN (аналог GOVATARS_POSTGRES_DSN из docker-compose).
+*/}}
+{{- define "govatars.postgresDSN" -}}
+postgres://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.host }}:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?sslmode=disable
+{{- end }}
+
+{{/*
+RabbitMQ URL (аналог GOVATARS_RABBITMQ_URL из docker-compose).
+*/}}
+{{- define "govatars.rabbitmqURL" -}}
+amqp://{{ .Values.rabbitmq.user }}:{{ .Values.rabbitmq.password }}@{{ .Values.rabbitmq.host }}:{{ .Values.rabbitmq.port }}/
+{{- end }}
+
+{{/*
+Общие переменные окружения server и worker.
+Переопределяют значения из config.yaml так же, как environment в docker-compose.
+*/}}
+{{- define "govatars.commonEnv" -}}
+- name: GOVATARS_POSTGRES_DSN
+  value: {{ include "govatars.postgresDSN" . | quote }}
+- name: GOVATARS_RABBITMQ_URL
+  value: {{ include "govatars.rabbitmqURL" . | quote }}
+- name: GOVATARS_S3_ENDPOINT
+  value: {{ printf "%s:%v" .Values.minio.host .Values.minio.port | quote }}
+- name: GOVATARS_S3_ACCESS_KEY
+  value: {{ .Values.minio.rootUser | quote }}
+- name: GOVATARS_S3_SECRET_KEY
+  value: {{ .Values.minio.rootPassword | quote }}
+- name: OTEL_RESOURCE_ATTRIBUTES
+  value: "deployment.environment=development"
+{{- end }}

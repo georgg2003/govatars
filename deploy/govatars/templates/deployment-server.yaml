@@ -5,7 +5,7 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Values.app.name }}
     app.kubernetes.io/component: {{ .Values.server.name }}
-    app.kubernetes.io/version: {{ .Values.app.version }}
+    app.kubernetes.io/version: {{ .Values.app.version | quote }}
 spec:
   {{- if not .Values.server.autoscaling.enabled }}
   replicas: {{ .Values.server.replicaCount }}
@@ -16,10 +16,11 @@ spec:
       app.kubernetes.io/component: {{ .Values.server.name }}
   template:
     metadata:
-      {{- with .Values.server.podAnnotations }}
       annotations:
+        checksum/config: {{ .Files.Get "files/config.yaml" | sha256sum }}
+        {{- with .Values.server.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       labels:
         app.kubernetes.io/name: {{ .Values.app.name }}
         app.kubernetes.io/component: {{ .Values.server.name }}
@@ -32,16 +33,23 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
+        - name: {{ .Chart.Name }}-server
           {{- with .Values.server.securityContext }}
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           image: "{{ .Values.server.image.repository }}:{{ .Values.server.image.tag }}"
           imagePullPolicy: {{ .Values.server.image.pullPolicy }}
+          command: ["./server"]
+          env:
+            {{- include "govatars.commonEnv" . | nindent 12 }}
+            - name: GOVATARS_HTTP_PUBLIC_BASE_URL
+              value: {{ .Values.http.publicBaseURL | quote }}
+            - name: GOVATARS_OTEL_RESOURCE_SERVICE_NAME
+              value: govatars_server
           ports:
             - name: http
-              containerPort: {{ .Values.server.service.port }}
+              containerPort: {{ .Values.server.containerPort }}
               protocol: TCP
           {{- with .Values.server.livenessProbe }}
           livenessProbe:
@@ -55,3 +63,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /app/config/config.yaml
+              subPath: config.yaml
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "govatars.fullname" . }}-config

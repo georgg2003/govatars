@@ -1,0 +1,61 @@
+{{- if .Values.migrate.enabled }}
+# Миграции БД — аналог сервиса migrate из docker-compose.
+# Выполняются как Helm-хук перед install/upgrade (аналог depends_on:
+# service_completed_successfully для server/worker). ConfigMap с SQL-файлами
+# создаётся тем же хуком с меньшим весом, чтобы существовать к моменту запуска Job.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "govatars.fullname" . }}-migrations
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+{{- range $path, $_ := .Files.Glob "files/migrations/*.sql" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "govatars.fullname" . }}-migrate
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 5
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.app.name }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag }}"
+          imagePullPolicy: {{ .Values.migrate.image.pullPolicy }}
+          args:
+            - "-path=/migrations"
+            - "-database=$(GOVATARS_POSTGRES_DSN)"
+            - "up"
+          env:
+            - name: GOVATARS_POSTGRES_DSN
+              value: {{ include "govatars.postgresDSN" . | quote }}
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+      volumes:
+        - name: migrations
+          configMap:
+            name: {{ include "govatars.fullname" . }}-migrations
+{{- end }}

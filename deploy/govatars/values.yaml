@@ -1,5 +1,43 @@
 app:
   name: govatars
+  version: "1.0.0"
+
+# Имена сервисов инфраструктуры в кластере (совпадают с именами сервисов compose).
+# Используются для сборки строк подключения (env GOVATARS_*), как в docker-compose.
+postgres:
+  host: postgres
+  port: 5432
+  user: govatars
+  password: govatars
+  database: govatars
+
+rabbitmq:
+  host: rabbitmq
+  port: 5672
+  user: govatars
+  password: govatars
+
+minio:
+  host: minio
+  port: 9000
+  rootUser: minioadmin
+  rootPassword: minioadmin
+
+otel:
+  collectorHost: otel-collector
+  collectorPort: 4317
+
+# Публичный базовый URL (аналог GOVATARS_HTTP_PUBLIC_BASE_URL из compose)
+http:
+  publicBaseURL: "http://localhost:8080"
+
+# Миграции БД (аналог сервиса migrate из compose) — pre-install/pre-upgrade hook.
+migrate:
+  enabled: true
+  image:
+    repository: migrate/migrate
+    tag: v4.19.0
+    pullPolicy: IfNotPresent
 
 server:
   name: server
@@ -12,16 +50,29 @@ server:
 
   service:
     type: ClusterIP
-    port: 80
+    port: 8080
 
+  containerPort: 8080
+
+  # аналог healthcheck server из compose: GET /health
   livenessProbe:
     httpGet:
-      path: /
+      path: /health
       port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
   readinessProbe:
     httpGet:
-      path: /
+      path: /health
       port: http
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 5
+
+  resources: {}
 
   autoscaling:
     enabled: false
@@ -39,18 +90,7 @@ worker:
     pullPolicy: IfNotPresent
     tag: latest
 
-  service:
-    type: ClusterIP
-    port: 80
-
-  livenessProbe:
-    httpGet:
-      path: /
-      port: http
-  readinessProbe:
-    httpGet:
-      path: /
-      port: http
+  resources: {}
 
   autoscaling:
     enabled: false
