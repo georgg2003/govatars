@@ -25,11 +25,6 @@ releases:
     version: 0.19.5
     values:
       - fullnameOverride: postgres
-        # как в docker-compose (postgres:16-alpine). PostgreSQL 18 сменил раскладку
-        # данных (мажор-версионный подкаталог), что несовместимо со старым PVC.
-        image:
-          repository: postgres
-          tag: "16-alpine"
         auth:
           username: govatars
           password: govatars

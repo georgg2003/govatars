@@ -5,7 +5,5 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Values.app.name }}
 data:
-  # Полный config.yaml приложения (аналог монтирования ./config/config.yaml в compose).
-  # Сетевые параметры подключения переопределяются переменными окружения GOVATARS_*.
   config.yaml: |
 {{ .Files.Get "files/config.yaml" | indent 4 }}

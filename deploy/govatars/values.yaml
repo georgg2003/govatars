@@ -27,11 +27,10 @@ otel:
   collectorHost: otel-collector
   collectorPort: 4317
 
-# Публичный базовый URL (аналог GOVATARS_HTTP_PUBLIC_BASE_URL из compose)
 http:
   publicBaseURL: "http://localhost:8080"
 
-# Миграции БД (аналог сервиса migrate из compose) — pre-install/pre-upgrade hook.
+# DB migrations — pre-install/pre-upgrade hook.
 migrate:
   enabled: true
   image:
