@@ -1,0 +1,59 @@
+# repositories:
+#   - name: grafana
+#     url: https://grafana.github.io/helm-charts
+
+#   - name: prometheus-community
+#     url: https://prometheus-community.github.io/helm-charts
+
+#   - name: bitnami
+#     url: https://charts.bitnami.com/bitnami
+  
+#   - name: open-telemetry
+#     url: https://open-telemetry.github.io/opentelemetry-helm-charts
+
+releases:
+  - name: grafana
+    namespace: monitoring
+    chart: grafana/grafana
+
+  - name: loki
+    namespace: monitoring
+    chart: grafana/loki
+
+  - name: prometheus
+    namespace: monitoring
+    chart: prometheus-community/kube-prometheus-stack
+
+  - name: otel
+    namespace: monitoring
+    chart: open-telemetry/opentelemetry-collector
+    values:
+      - mode: deployment
+      - image:
+          repository: otel/opentelemetry-collector-contrib
+          tag: latest
+      - config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          exporters:
+            logging: {}
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                exporters: [logging]
+
+  - name: postgres
+    namespace: infra
+    chart: bitnami/postgresql
+
+  - name: rabbitmq
+    namespace: infra
+    chart: bitnami/rabbitmq
+
+  - name: govatars
+    namespace: govatars
+    chart: ./govatars
