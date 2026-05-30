@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/metrics"
 	"govatars/internal/repository/postgres"
 	"govatars/internal/repository/rabbitmq"
 	s3repo "govatars/internal/repository/s3"
@@ -29,8 +30,13 @@ type App struct {
 }
 
 // New opens Postgres, S3, and RabbitMQ publisher, then builds use cases.
-func New(ctx context.Context, log *slog.Logger, cfg *config.App) (*App, error) {
-	pgPool, err := postgres.New(ctx, cfg.Postgres)
+func New(
+	ctx context.Context,
+	log *slog.Logger,
+	cfg *config.App,
+	biz *metrics.Business,
+) (*App, error) {
+	pgPool, err := postgres.New(ctx, cfg.Postgres, cfg.OTEL.TracingEnabled())
 	if err != nil {
 		return nil, err
 	}
@@ -49,8 +55,7 @@ func New(ctx context.Context, log *slog.Logger, cfg *config.App) (*App, error) {
 
 	thumbs, err := cfg.Avatars.Catalog()
 	if err != nil {
-		//nolint:contextcheck // rabbitmq.Publisher.Close does not accept context
-		if cerr := pub.Close(); cerr != nil {
+		if cerr := pub.Close(ctx); cerr != nil {
 			log.WarnContext(ctx, "close rabbitmq publisher after catalog error", "err", cerr)
 		}
 		pgPool.Close()
@@ -59,8 +64,7 @@ func New(ctx context.Context, log *slog.Logger, cfg *config.App) (*App, error) {
 
 	avatarRepo := postgres.NewAvatarRepository(pgPool.Pgx())
 	healthUC := usecase.NewHealth(pgPool, s3Client, pub)
-	//nolint:contextcheck // Constructor reads placeholder file synchronously; warns are intentionally not request-scoped.
-	avatarUC := usecase.NewAvatarService(avatarRepo, s3Client, pub, cfg, thumbs, log)
+	avatarUC := usecase.NewAvatarService(ctx, avatarRepo, s3Client, pub, cfg, thumbs, log, biz)
 
 	prewarmCtx, prewarmCancel := context.WithTimeout(ctx, placeholderPrewarmTimeout)
 	if err := avatarUC.EnsurePlaceholderInS3(prewarmCtx); err != nil {
@@ -88,8 +92,7 @@ func (a *App) Close(ctx context.Context) {
 		return
 	}
 	if a.Publisher != nil {
-		//nolint:contextcheck // rabbitmq.Publisher.Close does not accept context; ctx is used only for the WarnContext below.
-		if err := a.Publisher.Close(); err != nil {
+		if err := a.Publisher.Close(ctx); err != nil {
 			a.Logger.WarnContext(ctx, "publisher close", "err", err)
 		}
 	}

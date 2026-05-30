@@ -8,6 +8,8 @@ import (
 
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/metrics"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/repository/postgres"
 	s3repo "govatars/internal/repository/s3"
 	"govatars/internal/usecase"
@@ -29,9 +31,37 @@ func run() int {
 		return 1
 	}
 
-	log := logging.NewWorkerLogger(logging.LevelFromString(cfg.Logging.Level))
+	logLevel := logging.LevelFromString(cfg.Logging.Level)
+	log := logging.NewWorkerLogger(logLevel)
 
-	pgPool, err := postgres.New(ctx, cfg.Postgres)
+	var biz *metrics.Business
+	if cfg.OTEL.Enabled {
+		otel, err := otelpkg.Bootstrap(ctx, cfg.OTEL, logLevel, log, logging.NewOTELWorkerLogger)
+		if err != nil {
+			log.ErrorContext(ctx, "otel bootstrap failed", "err", err)
+			return 1
+		}
+		log = otel.Logger
+		defer otel.Shutdown(ctx)
+		if otel.Metrics != nil {
+			biz, err = metrics.NewBusiness(otel.Metrics.MeterProvider)
+		} else {
+			biz, err = metrics.NewBusiness(nil)
+		}
+		if err != nil {
+			log.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
+		}
+	}
+	if biz == nil {
+		biz, err = metrics.NewBusiness(nil)
+		if err != nil {
+			log.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
+		}
+	}
+
+	pgPool, err := postgres.New(ctx, cfg.Postgres, cfg.OTEL.TracingEnabled())
 	if err != nil {
 		log.ErrorContext(ctx, "postgres", "err", err)
 		return 1
@@ -51,8 +81,8 @@ func run() int {
 	}
 
 	repo := postgres.NewAvatarRepository(pgPool.Pgx())
-	queueJobs := usecase.NewAvatarQueueJobs(log, repo, s3Client, thumbs)
-	proc := worker.NewProcessor(log, queueJobs, cfg.RabbitMQ)
+	queueJobs := usecase.NewAvatarQueueJobs(log, repo, s3Client, thumbs, biz)
+	proc := worker.NewProcessor(log, queueJobs, cfg.RabbitMQ, biz)
 
 	app, err := worker.NewApp(ctx, log, proc, cfg.RabbitMQ)
 	if err != nil {

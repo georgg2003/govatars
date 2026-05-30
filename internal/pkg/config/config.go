@@ -23,6 +23,7 @@ type App struct {
 	S3       S3       `mapstructure:"s3"`
 	RabbitMQ RabbitMQ `mapstructure:"rabbitmq"`
 	Avatars  Avatars  `mapstructure:"avatars"`
+	OTEL     OTEL     `mapstructure:"otel"`
 }
 
 // Logging configures process-wide slog output (level only for now).
@@ -125,6 +126,63 @@ type RabbitMQ struct {
 	DeleteConsumerTag string `mapstructure:"delete_consumer_tag"`
 }
 
+type OTEL struct {
+	Enabled             bool                `mapstructure:"enabled"`
+	Resource            OTELResource        `mapstructure:"resource"`
+	OTELLoggerProvider  OTELLoggerProvider  `mapstructure:"logger_provider"`
+	OTELMetricsProvider OTELMetricsProvider `mapstructure:"metrics_provider"`
+	OTELTracerProvider  OTELTracerProvider  `mapstructure:"tracer_provider"`
+}
+
+// TracingEnabled reports whether trace export and DB instrumentation (otelpgx) are active.
+func (o OTEL) TracingEnabled() bool {
+	return o.Enabled && o.OTELTracerProvider.Enabled
+}
+
+// MetricsEnabled reports whether OTLP metrics and business counters are exported.
+func (o OTEL) MetricsEnabled() bool {
+	return o.Enabled && o.OTELMetricsProvider.Enabled
+}
+
+// HTTPInstrumentationEnabled reports whether otelecho HTTP middleware should run (traces and/or RED metrics).
+func (o OTEL) HTTPInstrumentationEnabled() bool {
+	return o.TracingEnabled() || o.MetricsEnabled()
+}
+
+type OTELLoggerProvider struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Endpoint        string        `mapstructure:"endpoint"`
+	Insecure        bool          `mapstructure:"insecure"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	BatchSize       int           `mapstructure:"batch_size"`
+	BatchTimeout    time.Duration `mapstructure:"batch_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+type OTELMetricsProvider struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Endpoint        string        `mapstructure:"endpoint"`
+	Insecure        bool          `mapstructure:"insecure"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	Interval        time.Duration `mapstructure:"interval"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+type OTELTracerProvider struct {
+	Enabled         bool          `mapstructure:"enabled"`
+	Endpoint        string        `mapstructure:"endpoint"`
+	Insecure        bool          `mapstructure:"insecure"`
+	Timeout         time.Duration `mapstructure:"timeout"`
+	BatchSize       int           `mapstructure:"batch_size"`
+	BatchTimeout    time.Duration `mapstructure:"batch_timeout"`
+	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+}
+
+type OTELResource struct {
+	ServiceName    string `mapstructure:"service_name"`
+	ServiceVersion string `mapstructure:"service_version"`
+}
+
 // Load reads configuration: defaults → optional YAML → environment (GOVATARS_*).
 func Load() (*App, error) {
 	fs := pflag.NewFlagSet(os.Args[0], pflag.ContinueOnError)
@@ -204,4 +262,31 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.consumer_handle_timeout", "3m")
 	v.SetDefault("rabbitmq.upload_consumer_tag", "govatars-upload")
 	v.SetDefault("rabbitmq.delete_consumer_tag", "govatars-delete")
+
+	v.SetDefault("otel.enabled", false)
+	v.SetDefault("otel.resource.service_name", "govatars")
+	v.SetDefault("otel.resource.service_version", "1.0.0")
+
+	v.SetDefault("otel.logger_provider.enabled", true)
+	v.SetDefault("otel.logger_provider.endpoint", "otel-collector:4317")
+	v.SetDefault("otel.logger_provider.insecure", true)
+	v.SetDefault("otel.logger_provider.timeout", "10s")
+	v.SetDefault("otel.logger_provider.batch_size", 100)
+	v.SetDefault("otel.logger_provider.batch_timeout", "10s")
+	v.SetDefault("otel.logger_provider.shutdown_timeout", "10s")
+
+	v.SetDefault("otel.metrics_provider.enabled", true)
+	v.SetDefault("otel.metrics_provider.endpoint", "otel-collector:4317")
+	v.SetDefault("otel.metrics_provider.insecure", true)
+	v.SetDefault("otel.metrics_provider.timeout", "10s")
+	v.SetDefault("otel.metrics_provider.interval", "10s")
+	v.SetDefault("otel.metrics_provider.shutdown_timeout", "10s")
+
+	v.SetDefault("otel.tracer_provider.enabled", true)
+	v.SetDefault("otel.tracer_provider.endpoint", "otel-collector:4317")
+	v.SetDefault("otel.tracer_provider.insecure", true)
+	v.SetDefault("otel.tracer_provider.timeout", "10s")
+	v.SetDefault("otel.tracer_provider.batch_size", 100)
+	v.SetDefault("otel.tracer_provider.batch_timeout", "10s")
+	v.SetDefault("otel.tracer_provider.shutdown_timeout", "10s")
 }

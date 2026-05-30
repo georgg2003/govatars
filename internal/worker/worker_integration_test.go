@@ -80,7 +80,7 @@ func (s *WorkerAppSuite) SetupSuite() {
 	dsn, err := pg.ConnectionString(ctx, "sslmode=disable")
 	s.Require().NoError(err)
 	s.Require().Eventually(func() bool {
-		s.pool, err = postgres.New(ctx, config.Postgres{DSN: dsn})
+		s.pool, err = postgres.New(ctx, config.Postgres{DSN: dsn}, false)
 		return err == nil
 	}, 20*time.Second, 300*time.Millisecond, "postgres container is not ready: %v", err)
 	s.applyMigrations(ctx)
@@ -130,8 +130,8 @@ func (s *WorkerAppSuite) SetupSuite() {
 		s.Require().NoError(err)
 	}
 
-	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.s3Client, cat)
-	proc := worker.NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg)
+	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.s3Client, cat, nil)
+	proc := worker.NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg, nil)
 
 	appCtx, cancel := context.WithCancel(context.Background())
 	s.appCancel = cancel
@@ -165,7 +165,7 @@ func (s *WorkerAppSuite) TearDownSuite() {
 		}
 	}
 	if s.publisher != nil {
-		if err := s.publisher.Close(); err != nil {
+		if err := s.publisher.Close(context.Background()); err != nil {
 			s.T().Logf("publisher close: %v", err)
 		}
 	}
@@ -226,7 +226,7 @@ func (s *WorkerAppSuite) TestAppRun_ProcessesUpload() {
 		ID: id, UserID: user, FileName: "a.png", MimeType: "image/png",
 		SizeBytes: int64(len(minPNG)), S3Key: key,
 		ProcessingStatus: models.ProcessingStatusPending,
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:        now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))
 	s.Require().NoError(s.s3Client.PutObject(ctx, key, bytes.NewReader(minPNG), int64(len(minPNG)), "image/png"))
@@ -276,7 +276,7 @@ func (s *WorkerAppSuite) TestAppRun_DLQAfterRetries() {
 		ID: id, UserID: user, FileName: "x.png", MimeType: "image/png",
 		SizeBytes: 0, S3Key: missingKey,
 		ProcessingStatus: models.ProcessingStatusPending,
-		CreatedAt: now, UpdatedAt: now,
+		CreatedAt:        now, UpdatedAt: now,
 	}
 	s.Require().NoError(s.repo.Insert(ctx, a))
 

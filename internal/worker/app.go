@@ -94,8 +94,8 @@ func (a *App) Run(ctx context.Context) error {
 		return apperr.Wrap(err, "consume delete")
 	}
 
-	go a.consumeLoop(ctx, uploadMsgs, chUp, a.proc.HandleUploadDelivery, "upload delivery")
-	go a.consumeLoop(ctx, deleteMsgs, chDel, a.proc.HandleDeleteDelivery, "delete delivery")
+	go a.consumeLoop(ctx, uploadMsgs, chUp, a.proc.HandleUploadDelivery, "upload", a.cfg.UploadQueue, "upload delivery")
+	go a.consumeLoop(ctx, deleteMsgs, chDel, a.proc.HandleDeleteDelivery, "delete", a.cfg.DeleteQueue, "delete delivery")
 
 	a.log.InfoContext(ctx, "worker consuming", "upload_queue", a.cfg.UploadQueue, "delete_queue", a.cfg.DeleteQueue)
 	<-ctx.Done()
@@ -110,7 +110,7 @@ func (a *App) consumeLoop(
 	deliveries <-chan amqp.Delivery,
 	ch amqpPublisher,
 	handler deliveryHandler,
-	errLogKey string,
+	operation, queue, errLogKey string,
 ) {
 	for {
 		select {
@@ -120,18 +120,20 @@ func (a *App) consumeLoop(
 			if !ok {
 				return
 			}
-			hctx, cancel := context.WithTimeout(ctx, a.handleTimeout)
+			spanCtx, endSpan := consumeContext(ctx, d, operation, queue)
+			hctx, cancel := context.WithTimeout(spanCtx, a.handleTimeout)
 			err := handler(hctx, ch, d)
 			cancel()
+			endSpan(err)
 			if err != nil {
-				a.log.ErrorContext(ctx, errLogKey, "err", err)
+				a.log.ErrorContext(spanCtx, errLogKey, "err", err)
 				if nackErr := d.Nack(false, false); nackErr != nil {
-					a.log.WarnContext(ctx, "amqp nack", "err", nackErr)
+					a.log.WarnContext(spanCtx, "amqp nack", "err", nackErr)
 				}
 				continue
 			}
 			if ackErr := d.Ack(false); ackErr != nil {
-				a.log.WarnContext(ctx, "amqp ack", "err", ackErr)
+				a.log.WarnContext(spanCtx, "amqp ack", "err", ackErr)
 			}
 		}
 	}

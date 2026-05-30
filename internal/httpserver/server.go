@@ -20,7 +20,10 @@ import (
 	"govatars/internal/delivery/web"
 	"govatars/internal/pkg/contextlib"
 	srvmw "govatars/internal/pkg/middleware"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/serverapp"
+
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 )
 
 // Run builds Echo, serves until ctx is cancelled, then shuts down gracefully.
@@ -30,6 +33,11 @@ func Run(ctx context.Context, application *serverapp.App) error {
 
 	e := echo.New()
 	e.HideBanner = true
+
+	if cfg.OTEL.HTTPInstrumentationEnabled() {
+		e.Use(otelecho.Middleware(otelpkg.ScopeSlog))
+	}
+
 	e.Use(middleware.RequestID())
 	e.Use(srvmw.RequestUserID())
 	e.Use(srvmw.RequestContext())
@@ -90,7 +98,13 @@ func Run(ctx context.Context, application *serverapp.App) error {
 	if err != nil {
 		return fmt.Errorf("avatars catalog: %w", err)
 	}
-	srv := httphandler.NewServer(application.Health, application.Avatar, cfg.Avatars.MaxUploadBytes, thumbs.Labels, httphandler.WithLogger(logger))
+	srv := httphandler.NewServer(
+		application.Health,
+		application.Avatar,
+		cfg.Avatars.MaxUploadBytes,
+		thumbs.Labels,
+		httphandler.WithLogger(logger),
+	)
 	//nolint:contextcheck // Route registration; each request still carries context via Echo.
 	web.New(application.Avatar, cfg.HTTP.StaticDir, web.WithLogger(logger)).Register(e)
 	httphandler.RegisterHandlers(e, srv)

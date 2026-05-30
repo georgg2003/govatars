@@ -60,11 +60,13 @@ go generate ./...
 - Environment: prefix `**GOVATARS_**`, nested keys use `_` (e.g. `GOVATARS_POSTGRES_DSN`, `GOVATARS_HTTP_ADDRESS`).
 - **Postgres**: set `postgres.dsn`, or omit `dsn` and set `postgres.host`, `postgres.user`, `postgres.database` (and optional `port`, `password`, `sslmode`) to build a URL.
 
-## Logging
+## Logging & observability
 
-- `**internal/pkg/logging.New()**` returns a `***slog.Logger**` (JSON to stderr). `**cmd/server**` and `**cmd/worker**` create it once and pass it where needed (worker `**NewProcessor` / `NewApp**`, server `**main**` and panic handler). There is **no** `slog.SetDefault` — dependencies stay explicit.
-- **HTTP access logs**: Echo `RequestID` (`X-Request-ID`), then `internal/pkg/middleware` attaches request metadata to `context` and logs one JSON line per request (`request_id`, `host`, `remote_ip`, `method`, `path`, `status`, `latency`, `user_id` from `X-User-ID` — empty string when the header is absent, etc.).
-- Set `**LOG_LEVEL`** to `debug`, `info`, `warn`, or `error` to tune slog verbosity (default `**info`**).
+- **Structured logs**: JSON via `slog` (`internal/pkg/logging`). HTTP requests get `request_id`, `user_id`, and (when OTEL is on) `trace_id` / `span_id` for correlation with Jaeger.
+- **OTEL** (optional): set `otel.enabled: true` or `GOVATARS_OTEL_ENABLED=true`. Exports traces → Jaeger, metrics → Prometheus, logs → Loki. See [docs/observability.md](docs/observability.md) for ports, LogQL examples, and the acceptance checklist.
+- **Full stack**: `docker compose up` starts API, worker, Postgres, MinIO, RabbitMQ, OTEL Collector, Jaeger (`:16686`), Prometheus (`:9090`), Loki, Grafana (`:3000` — **Govatars** and **Govatars Logs** dashboards).
+- **Local dev without collector**: default `otel.enabled: false` in `config/config.yaml`; logs stay on stderr only.
+- **Log level**: `logging.level` / `GOVATARS_LOGGING_LEVEL` — `debug`, `info`, `warn`, `error` (default `info`).
 
 ## Development
 

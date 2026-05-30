@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/exaring/otelpgx"
 
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
@@ -15,7 +16,8 @@ type Pool struct {
 }
 
 // New opens a connection pool from [config.Postgres] (DSN or composed fields) and pool tuning.
-func New(ctx context.Context, pg config.Postgres) (*Pool, error) {
+// When traceDB is false, pgx runs without otelpgx instrumentation.
+func New(ctx context.Context, pg config.Postgres, traceDB bool) (*Pool, error) {
 	dsn, err := pg.ResolveDSN()
 	if err != nil {
 		return nil, err
@@ -41,6 +43,9 @@ func New(ctx context.Context, pg config.Postgres) (*Pool, error) {
 	}
 	if pg.PoolMaxConnLifetimeJitter > 0 {
 		poolCfg.MaxConnLifetimeJitter = pg.PoolMaxConnLifetimeJitter
+	}
+	if traceDB {
+		poolCfg.ConnConfig.Tracer = otelpgx.NewTracer()
 	}
 
 	pgxPool, err := pgxpool.NewWithConfig(ctx, poolCfg)

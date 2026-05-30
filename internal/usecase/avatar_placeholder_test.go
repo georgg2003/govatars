@@ -57,7 +57,7 @@ func (s *AvatarPlaceholderSuite) newPlaceholderTestService() (*AvatarService, []
 	cfg.Normalize()
 	cat, err := cfg.Avatars.Catalog()
 	s.Require().NoError(err)
-	svc := NewAvatarService(nil, s.store, nil, cfg, cat, slog.New(slog.DiscardHandler))
+	svc := NewAvatarService(context.Background(), nil, s.store, nil, cfg, cat, slog.New(slog.DiscardHandler), nil)
 	bs := s.makePlaceholderPNG()
 	decoded, err := imaging.Decode(bytes.NewReader(bs))
 	s.Require().NoError(err)

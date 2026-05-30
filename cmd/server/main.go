@@ -10,6 +10,8 @@ import (
 	"govatars/internal/httpserver"
 	"govatars/internal/pkg/config"
 	"govatars/internal/pkg/logging"
+	"govatars/internal/pkg/metrics"
+	"govatars/internal/pkg/otelpkg"
 	"govatars/internal/serverapp"
 )
 
@@ -28,8 +30,34 @@ func run() int {
 		return 1
 	}
 	logger := logging.NewServerLogger(logging.LevelFromString(cfg.Logging.Level))
+	logLevel := logging.LevelFromString(cfg.Logging.Level)
 
-	application, err := serverapp.New(ctx, logger, cfg)
+	var biz *metrics.Business
+	if cfg.OTEL.Enabled {
+		otel, err := otelpkg.Bootstrap(ctx, cfg.OTEL, logLevel, logger, logging.NewOTELServerLogger)
+		if err != nil {
+			logger.ErrorContext(ctx, "otel bootstrap failed", "err", err)
+			return 1
+		}
+		logger = otel.Logger
+		defer otel.Shutdown(ctx)
+		if otel.Metrics != nil {
+			biz, err = metrics.NewBusiness(otel.Metrics.MeterProvider)
+			if err != nil {
+				logger.ErrorContext(ctx, "business metrics init failed", "err", err)
+				return 1
+			}
+		}
+	}
+	if biz == nil {
+		biz, err = metrics.NewBusiness(nil)
+		if err != nil {
+			logger.ErrorContext(ctx, "business metrics init failed", "err", err)
+			return 1
+		}
+	}
+
+	application, err := serverapp.New(ctx, logger, cfg, biz)
 	if err != nil {
 		logger.ErrorContext(ctx, "app init failed", "err", err)
 		return 1

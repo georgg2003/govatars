@@ -57,12 +57,12 @@ func NewPublisher(ctx context.Context, log *slog.Logger, cfg config.RabbitMQ) (*
 }
 
 // Close releases the channel and connection.
-func (p *Publisher) Close() error {
+func (p *Publisher) Close(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.ch != nil {
 		if err := p.ch.Close(); err != nil {
-			p.log.WarnContext(context.Background(), "rabbitmq channel close", "err", err)
+			p.log.WarnContext(ctx, "rabbitmq channel close", "err", err)
 		}
 	}
 	if p.conn != nil {
@@ -96,9 +96,6 @@ func (p *Publisher) Health(ctx context.Context) error {
 
 // PublishJSON sends a persistent JSON message with optional AMQP message id (idempotency hint).
 func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageID string, body any) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -113,7 +110,7 @@ func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageI
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.ch.PublishWithContext(ctx, p.cfg.Exchange, routingKey, false, false, pub)
+	return PublishWithContext(ctx, p.ch, p.cfg.Exchange, routingKey, pub)
 }
 
 var _ usecase.EventPublisher = (*Publisher)(nil)

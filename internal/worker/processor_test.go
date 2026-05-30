@@ -37,8 +37,8 @@ func (s *ProcessorSuite) SetupTest() {
 	s.repo = repomocks.NewMockAvatarRepository(s.ctrl)
 	s.store = repomocks.NewMockObjectStorage(s.ctrl)
 	s.cfg = testRabbit()
-	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.store, testThumbCatalog())
-	s.proc = NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg)
+	jobs := usecase.NewAvatarQueueJobs(slog.New(slog.DiscardHandler), s.repo, s.store, testThumbCatalog(), nil)
+	s.proc = NewProcessor(slog.New(slog.DiscardHandler), jobs, s.cfg, nil)
 	s.ch = NewMockamqpPublisher(s.ctrl)
 }
 

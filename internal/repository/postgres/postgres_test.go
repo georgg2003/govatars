@@ -11,6 +11,6 @@ import (
 )
 
 func TestNew_InvalidPostgresConfig(t *testing.T) {
-	_, err := postgres.New(context.Background(), config.Postgres{})
+	_, err := postgres.New(context.Background(), config.Postgres{}, false)
 	require.Error(t, err)
 }

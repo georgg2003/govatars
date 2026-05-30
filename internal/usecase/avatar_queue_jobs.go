@@ -7,14 +7,20 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"time"
 
 	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	_ "github.com/skrashevich/go-webp" // register WebP decoder (pure Go; aligns with API server)
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 
 	"govatars/internal/models"
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
+	"govatars/internal/pkg/metrics"
+	"govatars/internal/pkg/otelpkg"
 )
 
 // AvatarQueueJobs performs avatar work triggered from async queues (thumbnails, delete cleanup).
@@ -24,15 +30,24 @@ type AvatarQueueJobs struct {
 	repo   AvatarRepository
 	s3     ObjectStorage
 	thumbs config.ThumbnailCatalog
+	biz    *metrics.Business
 }
 
 // NewAvatarQueueJobs builds queue-driven avatar processing (used by the worker).
-func NewAvatarQueueJobs(log *slog.Logger, repo AvatarRepository, s3 ObjectStorage, thumbs config.ThumbnailCatalog) *AvatarQueueJobs {
-	return &AvatarQueueJobs{log: log, repo: repo, s3: s3, thumbs: thumbs}
+func NewAvatarQueueJobs(log *slog.Logger, repo AvatarRepository, s3 ObjectStorage, thumbs config.ThumbnailCatalog, biz *metrics.Business) *AvatarQueueJobs {
+	return &AvatarQueueJobs{log: log, repo: repo, s3: s3, thumbs: thumbs, biz: biz}
 }
 
 // ProcessAvatarUpload generates thumbnails and updates DB for one upload event.
 func (j *AvatarQueueJobs) ProcessAvatarUpload(ctx context.Context, ev *models.AvatarUploadEvent) (err error) {
+	start := time.Now()
+	ctx, span := otel.Tracer(otelpkg.ScopeUsecase).Start(ctx, "avatar.process_upload")
+	defer func() {
+		j.biz.RecordThumbnailJob(ctx, "upload", err == nil, time.Since(start))
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("avatar_id", ev.AvatarID), attribute.String("user_id", ev.UserID))
+
 	id, err := uuid.Parse(ev.AvatarID)
 	if err != nil {
 		return err
@@ -117,22 +132,37 @@ func (j *AvatarQueueJobs) ProcessAvatarUpload(ctx context.Context, ev *models.Av
 	}
 
 	if err := j.repo.UpdateProcessingResult(ctx, id, w, h, thumbs, models.ProcessingStatusCompleted); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	return nil
 }
 
 // ProcessAvatarDelete removes S3 objects listed on a delete event; joins partial failures.
-func (j *AvatarQueueJobs) ProcessAvatarDelete(ctx context.Context, ev *models.AvatarDeleteEvent) error {
+func (j *AvatarQueueJobs) ProcessAvatarDelete(ctx context.Context, ev *models.AvatarDeleteEvent) (err error) {
+	start := time.Now()
+	ctx, span := otel.Tracer(otelpkg.ScopeUsecase).Start(ctx, "avatar.process_delete")
+	defer func() {
+		j.biz.RecordThumbnailJob(ctx, "delete", err == nil, time.Since(start))
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+	span.SetAttributes(attribute.String("avatar_id", ev.AvatarID))
+
 	var errs []error
 	for _, key := range ev.S3Keys {
 		if key == "" {
 			continue
 		}
-		if err := j.s3.RemoveObject(ctx, key); err != nil {
-			j.log.WarnContext(ctx, "delete object", "key", key, "err", err)
-			errs = append(errs, err)
+		if rmErr := j.s3.RemoveObject(ctx, key); rmErr != nil {
+			j.log.WarnContext(ctx, "delete object", "key", key, "err", rmErr)
+			errs = append(errs, rmErr)
 		}
 	}
-	return errors.Join(errs...)
+	err = errors.Join(errs...)
+	return err
 }
