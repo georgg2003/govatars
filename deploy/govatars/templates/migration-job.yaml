@@ -38,7 +38,24 @@ spec:
         app.kubernetes.io/name: {{ .Values.app.name }}
         app.kubernetes.io/component: migrate
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "govatars.fullname" . }}-migrate
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- end }}
       restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for {{ .Values.postgres.host }}:{{ .Values.postgres.port }}..."
+              until nc -w2 {{ .Values.postgres.host }} {{ .Values.postgres.port }} </dev/null 2>/dev/null; do
+                echo "postgres is not available, retrying in 2s"
+                sleep 2
+              done
+              echo "postgres is available"
       containers:
         - name: migrate
           image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag }}"

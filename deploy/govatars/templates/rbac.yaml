@@ -1,0 +1,33 @@
+{{- if .Values.rbac.create }}
+# Namespaced-permissions for application. Enabled only when needed to access
+# Kubernetes API. Rules are taken from .Values.rbac.rules and bound to
+# server and worker accounts.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "govatars.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name }}
+    app.kubernetes.io/version: {{ .Values.app.version | quote }}
+rules:
+  {{- toYaml .Values.rbac.rules | nindent 2 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "govatars.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ .Values.app.name }}
+    app.kubernetes.io/version: {{ .Values.app.version | quote }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "govatars.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "govatars.fullname" . }}-{{ .Values.server.name }}
+    namespace: {{ .Release.Namespace }}
+  - kind: ServiceAccount
+    name: {{ include "govatars.fullname" . }}-{{ .Values.worker.name }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

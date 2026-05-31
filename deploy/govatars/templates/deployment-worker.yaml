@@ -28,9 +28,17 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      {{- if .Values.serviceAccount.create }}
+      serviceAccountName: {{ include "govatars.fullname" . }}-{{ .Values.worker.name }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- end }}
       {{- with .Values.worker.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.waitForDependencies.enabled }}
+      initContainers:
+        {{- include "govatars.waitForDeps" . | nindent 8 }}
       {{- end }}
       containers:
         - name: {{ .Chart.Name }}-worker

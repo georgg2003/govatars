@@ -39,6 +39,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+initContainer that waits for dependencies (postgres / rabbitmq / minio).
+*/}}
+{{- define "govatars.waitForDeps" -}}
+- name: wait-for-deps
+  image: {{ .Values.waitForDependencies.image }}
+  command:
+    - sh
+    - -c
+    - |
+      for dep in {{ printf "%s:%v" .Values.postgres.host .Values.postgres.port }} {{ printf "%s:%v" .Values.rabbitmq.host .Values.rabbitmq.port }} {{ printf "%s:%v" .Values.minio.host .Values.minio.port }}; do
+        host="${dep%%:*}"; port="${dep##*:}"
+        echo "Waiting for ${host}:${port}..."
+        until nc -w2 "$host" "$port" </dev/null 2>/dev/null; do
+          echo "${host}:${port} is unavailable, retry in 2s"
+          sleep 2
+        done
+        echo "${host}:${port} is available"
+      done
+{{- end }}
+
+{{/*
 Postgres DSN (аналог GOVATARS_POSTGRES_DSN из docker-compose).
 */}}
 {{- define "govatars.postgresDSN" -}}
