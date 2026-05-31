@@ -17,18 +17,30 @@ helmDefaults:
 
 releases:
   # ---------------------------------------------------------------------------
+  # Secrets: K8s Secrets for infra and application (existingSecret / secretKeyRef).
+  # Passwords are generated on first install, preserved on upgrade (lookup + keep).
+  # ---------------------------------------------------------------------------
+  - name: secrets
+    namespace: govatars
+    chart: ./secrets
+
+  # ---------------------------------------------------------------------------
   # Infrastructure (postgres / rabbitmq / minio)
   # ---------------------------------------------------------------------------
   - name: postgres
     namespace: govatars
     chart: oci://registry-1.docker.io/cloudpirates/postgres
     version: 0.19.5
+    needs:
+      - govatars/secrets
     values:
       - fullnameOverride: postgres
         auth:
           username: govatars
-          password: govatars
           database: govatars
+          existingSecret: govatars-postgres
+          secretKeys:
+            adminPasswordKey: postgres-password
         service:
           port: 5432
         persistence:
@@ -39,11 +51,15 @@ releases:
     namespace: govatars
     chart: oci://registry-1.docker.io/cloudpirates/rabbitmq
     version: 0.21.4
+    needs:
+      - govatars/secrets
     values:
       - fullnameOverride: rabbitmq
         auth:
           username: govatars
-          password: govatars
+          existingSecret: govatars-rabbitmq
+          existingPasswordKey: password
+          existingErlangCookieKey: erlang-cookie
         service:
           amqpPort: 5672
           managementPort: 15672
@@ -63,11 +79,14 @@ releases:
     namespace: govatars
     chart: oci://registry-1.docker.io/cloudpirates/minio
     version: 0.13.0
+    needs:
+      - govatars/secrets
     values:
       - fullnameOverride: minio
         auth:
-          rootUser: minioadmin
-          rootPassword: minioadmin
+          existingSecret: govatars-minio
+          existingSecretUserKey: root-user
+          existingSecretPasswordKey: root-password
         defaultBuckets: avatars
         service:
           port: 9000
@@ -270,6 +289,7 @@ releases:
     namespace: govatars
     chart: grafana/grafana
     needs:
+      - govatars/secrets
       - govatars/loki
       - govatars/prometheus
       - govatars/jaeger
@@ -277,8 +297,10 @@ releases:
       - fullnameOverride: grafana
         service:
           port: 3000
-        adminUser: admin
-        adminPassword: admin
+        admin:
+          existingSecret: govatars-grafana
+          userKey: admin-user
+          passwordKey: admin-password
         ingress:
           enabled: true
           ingressClassName: traefik
@@ -338,6 +360,7 @@ releases:
     namespace: govatars
     chart: ./govatars
     needs:
+      - govatars/secrets
       - govatars/postgres
       - govatars/rabbitmq
       - govatars/minio

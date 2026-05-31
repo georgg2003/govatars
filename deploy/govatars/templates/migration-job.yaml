@@ -65,8 +65,7 @@ spec:
             - "-database=$(GOVATARS_POSTGRES_DSN)"
             - "up"
           env:
-            - name: GOVATARS_POSTGRES_DSN
-              value: {{ include "govatars.postgresDSN" . | quote }}
+            {{- include "govatars.postgresDSNEnv" . | nindent 12 }}
           volumeMounts:
             - name: migrations
               mountPath: /migrations

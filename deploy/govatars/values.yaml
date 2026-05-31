@@ -7,6 +7,15 @@ serviceAccount:
   automountServiceAccountToken: false
   annotations: {}
 
+# K8s Secret с credentials (чарт deploy/secrets, secretKeyRef).
+secrets:
+  app: govatars-app
+  keys:
+    postgresDSN: postgres_dsn
+    rabbitmqURL: rabbitmq_url
+    s3AccessKey: s3_access_key
+    s3SecretKey: s3_secret_key
+
 rbac:
   create: false
   rules: []
@@ -19,20 +28,16 @@ postgres:
   host: postgres
   port: 5432
   user: govatars
-  password: govatars
   database: govatars
 
 rabbitmq:
   host: rabbitmq
   port: 5672
   user: govatars
-  password: govatars
 
 minio:
   host: minio
   port: 9000
-  rootUser: minioadmin
-  rootPassword: minioadmin
 
 otel:
   collectorHost: otel-collector

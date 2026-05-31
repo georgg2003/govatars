@@ -41,7 +41,11 @@ func NewServer(health *usecase.Health, avatars AvatarQueries, maxUploadBytes int
 
 func (s *Server) GetHealth(ctx echo.Context) error {
 	st := s.health.Status(ctx.Request().Context())
-	return ctx.JSON(http.StatusOK, st)
+	code := http.StatusOK
+	if st["status"] != "ok" {
+		code = http.StatusServiceUnavailable
+	}
+	return ctx.JSON(code, st)
 }
 
 func (s *Server) UploadAvatar(ctx echo.Context, params UploadAvatarParams) error {

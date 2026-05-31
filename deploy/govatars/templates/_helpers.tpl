@@ -60,34 +60,38 @@ initContainer that waits for dependencies (postgres / rabbitmq / minio).
 {{- end }}
 
 {{/*
-Postgres DSN (аналог GOVATARS_POSTGRES_DSN из docker-compose).
+App secrets from K8s Secret (deploy/secrets chart).
 */}}
-{{- define "govatars.postgresDSN" -}}
-postgres://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.host }}:{{ .Values.postgres.port }}/{{ .Values.postgres.database }}?sslmode=disable
+{{- define "govatars.postgresDSNEnv" -}}
+- name: GOVATARS_POSTGRES_DSN
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.app }}
+      key: {{ .Values.secrets.keys.postgresDSN }}
 {{- end }}
 
 {{/*
-RabbitMQ URL (аналог GOVATARS_RABBITMQ_URL из docker-compose).
-*/}}
-{{- define "govatars.rabbitmqURL" -}}
-amqp://{{ .Values.rabbitmq.user }}:{{ .Values.rabbitmq.password }}@{{ .Values.rabbitmq.host }}:{{ .Values.rabbitmq.port }}/
-{{- end }}
-
-{{/*
-Общие переменные окружения server и worker.
-Переопределяют значения из config.yaml так же, как environment в docker-compose.
+Common envs for server and worker.
 */}}
 {{- define "govatars.commonEnv" -}}
-- name: GOVATARS_POSTGRES_DSN
-  value: {{ include "govatars.postgresDSN" . | quote }}
+{{- include "govatars.postgresDSNEnv" . }}
 - name: GOVATARS_RABBITMQ_URL
-  value: {{ include "govatars.rabbitmqURL" . | quote }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.app }}
+      key: {{ .Values.secrets.keys.rabbitmqURL }}
+- name: GOVATARS_S3_ACCESS_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.app }}
+      key: {{ .Values.secrets.keys.s3AccessKey }}
+- name: GOVATARS_S3_SECRET_KEY
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.secrets.app }}
+      key: {{ .Values.secrets.keys.s3SecretKey }}
 - name: GOVATARS_S3_ENDPOINT
   value: {{ printf "%s:%v" .Values.minio.host .Values.minio.port | quote }}
-- name: GOVATARS_S3_ACCESS_KEY
-  value: {{ .Values.minio.rootUser | quote }}
-- name: GOVATARS_S3_SECRET_KEY
-  value: {{ .Values.minio.rootPassword | quote }}
 - name: OTEL_RESOURCE_ATTRIBUTES
   value: "deployment.environment=development"
 {{- end }}
