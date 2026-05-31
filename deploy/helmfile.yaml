@@ -332,7 +332,7 @@ releases:
     chart: ./grafana-dashboards
 
   # ---------------------------------------------------------------------------
-  # Приложение: server + worker + миграции (аналог server / worker / migrate)
+  # Application: server + worker + migrations
   # ---------------------------------------------------------------------------
   - name: govatars
     namespace: govatars
@@ -342,3 +342,21 @@ releases:
       - govatars/rabbitmq
       - govatars/minio
       - govatars/otel-collector
+
+  # ---------------------------------------------------------------------------
+  # Network policies: default-deny ingress + point-in-time traffic between
+  # components. Apply last, after all services are up.
+  # ---------------------------------------------------------------------------
+  - name: network-policies
+    namespace: govatars
+    chart: ./network-policies
+    needs:
+      - govatars/postgres
+      - govatars/rabbitmq
+      - govatars/minio
+      - govatars/jaeger
+      - govatars/loki
+      - govatars/prometheus
+      - govatars/otel-collector
+      - govatars/grafana
+      - govatars/govatars

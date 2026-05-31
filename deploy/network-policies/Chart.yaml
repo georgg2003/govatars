@@ -1,0 +1,9 @@
+apiVersion: v2
+name: network-policies
+description: >-
+  Network policies for namespace govatars: default-deny ingress + point-in-time
+  traffic between components (analog of service isolation in one docker network).
+  Egress is intentionally not limited.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
