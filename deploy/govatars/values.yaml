@@ -2,8 +2,6 @@ app:
   name: govatars
   version: "1.0.0"
 
-# Имена сервисов инфраструктуры в кластере (совпадают с именами сервисов compose).
-# Используются для сборки строк подключения (env GOVATARS_*), как в docker-compose.
 postgres:
   host: postgres
   port: 5432
@@ -53,7 +51,14 @@ server:
 
   containerPort: 8080
 
-  # аналог healthcheck server из compose: GET /health
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
   livenessProbe:
     httpGet:
       path: /health
@@ -71,10 +76,8 @@ server:
     timeoutSeconds: 5
     failureThreshold: 5
 
-  resources: {}
-
   autoscaling:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
@@ -89,10 +92,16 @@ worker:
     pullPolicy: IfNotPresent
     tag: latest
 
-  resources: {}
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
 
   autoscaling:
-    enabled: false
+    enabled: true
     minReplicas: 1
     maxReplicas: 10
     targetCPUUtilizationPercentage: 80
