@@ -44,6 +44,10 @@ initContainer that waits for dependencies (postgres / rabbitmq / minio).
 {{- define "govatars.waitForDeps" -}}
 - name: wait-for-deps
   image: {{ .Values.waitForDependencies.image }}
+  {{- with .Values.waitForDependencies.securityContext }}
+  securityContext:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   command:
     - sh
     - -c

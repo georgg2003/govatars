@@ -304,6 +304,8 @@ releases:
         persistence:
           enabled: true
           size: 1Gi
+        initChownData:
+          enabled: false
         ingress:
           enabled: true
           ingressClassName: traefik

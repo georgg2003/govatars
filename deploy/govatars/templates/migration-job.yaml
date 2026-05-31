@@ -42,10 +42,18 @@ spec:
       serviceAccountName: {{ include "govatars.fullname" . }}-migrate
       automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- end }}
+      {{- with .Values.migrate.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       restartPolicy: Never
       initContainers:
         - name: wait-for-postgres
-          image: busybox:1.36
+          image: {{ .Values.waitForDependencies.image }}
+          {{- with .Values.waitForDependencies.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           command:
             - sh
             - -c
@@ -58,6 +66,10 @@ spec:
               echo "postgres is available"
       containers:
         - name: migrate
+          {{- with .Values.migrate.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.migrate.image.repository }}:{{ .Values.migrate.image.tag }}"
           imagePullPolicy: {{ .Values.migrate.image.pullPolicy }}
           args:
