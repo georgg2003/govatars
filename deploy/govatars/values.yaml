@@ -26,7 +26,7 @@ otel:
   collectorPort: 4317
 
 http:
-  publicBaseURL: "http://localhost:8080"
+  publicBaseURL: "http://govatars.localhost"
 
 # DB migrations — pre-install/pre-upgrade hook.
 migrate:
@@ -50,6 +50,14 @@ server:
     port: 8080
 
   containerPort: 8080
+
+  ingress:
+    enabled: true
+    className: traefik
+    host: govatars.localhost
+    path: /
+    pathType: Prefix
+    annotations: {}
 
   resources:
     requests:

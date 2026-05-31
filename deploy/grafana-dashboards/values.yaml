@@ -1,2 +1,0 @@
-# Дашборды берутся из каталога dashboards/*.json (см. templates/configmap.yaml).
-# Отдельных параметров нет.

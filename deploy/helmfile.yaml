@@ -17,7 +17,7 @@ helmDefaults:
 
 releases:
   # ---------------------------------------------------------------------------
-  # Инфраструктура (аналог postgres / rabbitmq / minio из compose)
+  # Infrastructure (postgres / rabbitmq / minio)
   # ---------------------------------------------------------------------------
   - name: postgres
     namespace: govatars
@@ -50,6 +50,14 @@ releases:
         persistence:
           enabled: true
           size: 1Gi
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: rabbitmq.localhost
+              paths:
+                - path: /
+                  pathType: Prefix
 
   - name: minio
     namespace: govatars
@@ -69,8 +77,8 @@ releases:
           size: 2Gi
 
   # ---------------------------------------------------------------------------
-  # Трейсинг (аналог jaeger all-in-one). Единый Service "jaeger" отдаёт и OTLP
-  # (4317), и UI (16686) — как контейнер jaeger в compose.
+  # Tracing (analog of jaeger all-in-one). Single Service "jaeger" provides OTLP
+  # (4317), and UI (16686) - as container jaeger in compose.
   # ---------------------------------------------------------------------------
   - name: jaeger
     namespace: govatars
@@ -90,9 +98,16 @@ releases:
           enabled: false
         query:
           enabled: false
+        jaeger:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - jaeger.localhost
+            pathType: Prefix
 
   # ---------------------------------------------------------------------------
-  # Логи (аналог loki). Single binary + файловое хранилище, Service "loki:3100".
+  # Logs (loki). Single binary + file storage, Service "loki:3100".
   # ---------------------------------------------------------------------------
   - name: loki
     namespace: govatars
@@ -107,13 +122,13 @@ releases:
             configs:
               - from: "2024-04-01"
                 store: tsdb
-                object_store: filesystem
+                object_store: filesystem # can be changed to minio
                 schema: v13
                 index:
                   prefix: index_
                   period: 24h
           storage:
-            type: filesystem
+            type: filesystem # can be changed to minio
           limits_config:
             metric_aggregation_enabled: true
           pattern_ingester:
@@ -148,7 +163,7 @@ releases:
             enabled: false
 
   # ---------------------------------------------------------------------------
-  # Метрики (аналог prometheus + node_exporter)
+  # Metrics (prometheus + node_exporter)
   # ---------------------------------------------------------------------------
   - name: prometheus
     namespace: govatars
@@ -161,31 +176,27 @@ releases:
           persistentVolume:
             enabled: true
             size: 2Gi
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - prometheus.localhost
+            path: /
+            pathType: Prefix
           global:
             scrape_interval: 15s
-          scrape_configs:
-            - job_name: prometheus
-              static_configs:
-                - targets: ["prometheus:9090"]
-            - job_name: node
-              static_configs:
-                - targets: ["node-exporter:9100"]
-            - job_name: otel-collector
-              static_configs:
-                - targets: ["otel-collector:8889"]
-        prometheus-node-exporter:
-          enabled: true
-          fullnameOverride: node-exporter
+        extraScrapeConfigs: |
+          - job_name: otel-collector
+            static_configs:
+              - targets: ["otel-collector:8889"]
         alertmanager:
           enabled: false
         prometheus-pushgateway:
           enabled: false
-        kube-state-metrics:
-          enabled: false
 
   # ---------------------------------------------------------------------------
-  # OpenTelemetry Collector (аналог otel-collector).
-  # Конфиг повторяет otel-collector-config.yaml из compose.
+  # OpenTelemetry Collector (analog of otel-collector).
+  # Config repeats otel-collector-config.yaml from compose.
   # ---------------------------------------------------------------------------
   - name: otel-collector
     namespace: govatars
@@ -252,8 +263,8 @@ releases:
                 exporters: [otlp/traces]
 
   # ---------------------------------------------------------------------------
-  # Grafana + provisioning датасорсов (аналог grafana).
-  # Дашборды подтягиваются sidecar-ом из ConfigMap'ов релиза grafana-dashboards.
+  # Grafana + provisioning datasources (analog of grafana).
+  # Grafana dashboards are imported via sidecar from ConfigMaps of grafana-dashboards release.
   # ---------------------------------------------------------------------------
   - name: grafana
     namespace: govatars
@@ -268,6 +279,16 @@ releases:
           port: 3000
         adminUser: admin
         adminPassword: admin
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - grafana.localhost
+          path: /
+          pathType: Prefix
+        grafana.ini:
+          server:
+            root_url: "http://grafana.localhost"
         datasources:
           datasources.yaml:
             apiVersion: 1
@@ -305,7 +326,7 @@ releases:
             provider:
               foldersFromFilesStructure: true
 
-  # дашборды Grafana из grafana/dashboards (через dashboard sidecar)
+  # Grafana dashboards via dashboard sidecar
   - name: grafana-dashboards
     namespace: govatars
     chart: ./grafana-dashboards
