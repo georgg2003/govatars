@@ -53,7 +53,7 @@ otel:
   collectorPort: 4317
 
 http:
-  publicBaseURL: "http://govatars.localhost"
+  publicBaseURL: "https://govatars.localhost"
 
 # DB migrations — pre-install/pre-upgrade hook.
 migrate:
@@ -99,6 +99,10 @@ server:
     path: /
     pathType: Prefix
     annotations: {}
+    tls:
+      - hosts:
+          - govatars.localhost
+        secretName: govatars-ingress-tls
 
   resources:
     requests:
