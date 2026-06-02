@@ -105,6 +105,12 @@ type S3 struct {
 	Region    string `mapstructure:"region"`
 }
 
+// CircuitBreakerConfig tunes reconnect circuit breaker for RabbitMQ publisher.
+type CircuitBreakerConfig struct {
+	Threshold int           `mapstructure:"threshold"`
+	Cooldown  time.Duration `mapstructure:"cooldown"`
+}
+
 // RabbitMQ topology and connection.
 type RabbitMQ struct {
 	URL                 string `mapstructure:"url"`
@@ -124,6 +130,7 @@ type RabbitMQ struct {
 	// UploadConsumerTag and DeleteConsumerTag are AMQP basic.consume consumer tags (RabbitMQ management / cancel).
 	UploadConsumerTag string `mapstructure:"upload_consumer_tag"`
 	DeleteConsumerTag string `mapstructure:"delete_consumer_tag"`
+	CircuitBreaker    CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 }
 
 type OTEL struct {
@@ -262,6 +269,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.consumer_handle_timeout", "3m")
 	v.SetDefault("rabbitmq.upload_consumer_tag", "govatars-upload")
 	v.SetDefault("rabbitmq.delete_consumer_tag", "govatars-delete")
+	v.SetDefault("rabbitmq.circuit_breaker.threshold", 5)
+	v.SetDefault("rabbitmq.circuit_breaker.cooldown", "30s")
 
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.resource.service_name", "govatars")

@@ -33,7 +33,7 @@ func NewApp(ctx context.Context, log *slog.Logger, proc *Processor, cfg config.R
 	if cfg.URL == "" {
 		return nil, errors.New("worker.NewApp: empty rabbitmq url")
 	}
-	conn, err := rabbitmq.Dial(cfg.URL)
+	conn, err := rabbitmq.DialContext(ctx, cfg.URL)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -52,6 +53,8 @@ postgres:
 	require.NoError(t, err)
 	require.Equal(t, "govatars-upload", cfg.RabbitMQ.UploadConsumerTag)
 	require.Equal(t, "govatars-delete", cfg.RabbitMQ.DeleteConsumerTag)
+	require.Equal(t, 5, cfg.RabbitMQ.CircuitBreaker.Threshold)
+	require.Equal(t, 30*time.Second, cfg.RabbitMQ.CircuitBreaker.Cooldown)
 }
 
 func TestAvatars_Catalog_Defaults(t *testing.T) {
