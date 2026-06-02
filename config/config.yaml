@@ -1,6 +1,9 @@
 logging:
   level: info
 
+worker:
+  health_address: "0.0.0.0:8081"
+
 http:
   address: "0.0.0.0:8080"
   public_base_url: "http://localhost:8080"

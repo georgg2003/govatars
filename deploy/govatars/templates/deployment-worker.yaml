@@ -53,6 +53,18 @@ spec:
             {{- include "govatars.commonEnv" . | nindent 12 }}
             - name: GOVATARS_OTEL_RESOURCE_SERVICE_NAME
               value: govatars_worker
+          ports:
+            - name: health
+              containerPort: {{ .Values.worker.containerPort }}
+              protocol: TCP
+          {{- with .Values.worker.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.worker.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           {{- with .Values.worker.resources }}
           resources:
             {{- toYaml . | nindent 12 }}

@@ -3,10 +3,13 @@ package worker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+	"golang.org/x/sync/errgroup"
 
 	"govatars/internal/pkg/apperr"
 	"govatars/internal/pkg/config"
@@ -14,12 +17,14 @@ import (
 )
 
 // App wires AMQP channels, declares topology once, and runs upload + delete consumers until ctx ends.
+// On unexpected AMQP disconnect, Run returns an error so the process can exit and be restarted.
 type App struct {
 	log           *slog.Logger
 	proc          *Processor
 	cfg           config.RabbitMQ
 	conn          *amqp.Connection
 	handleTimeout time.Duration
+	ready         atomic.Bool
 }
 
 // NewApp builds the runnable worker and opens the RabbitMQ connection.
@@ -46,16 +51,41 @@ func NewApp(ctx context.Context, log *slog.Logger, proc *Processor, cfg config.R
 
 // Close closes the AMQP connection opened by [NewApp].
 func (a *App) Close() error {
+	a.ready.Store(false)
 	if a == nil || a.conn == nil {
 		return nil
 	}
 	return a.conn.Close()
 }
 
-// Run opens two channels, declares topology on the first, starts consumers, and blocks until ctx is done.
+// Run opens two channels, declares topology, starts consumers, and blocks until ctx is cancelled
+// or the AMQP session fails. healthAddr, when non-empty, serves GET /health for probes.
 //
 // Each *amqp.Channel is used from exactly one consumeLoop goroutine, so channel calls are not concurrent per channel.
-func (a *App) Run(ctx context.Context) error {
+func (a *App) Run(ctx context.Context, healthAddr string) error {
+	if healthAddr != "" {
+		go func() {
+			if err := a.serveHealth(ctx, healthAddr); err != nil && ctx.Err() == nil {
+				a.log.ErrorContext(ctx, "worker health server", "err", err)
+			}
+		}()
+	}
+
+	connClosed := a.conn.NotifyClose(make(chan *amqp.Error, 1))
+	g, gctx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		select {
+		case <-gctx.Done():
+			return nil
+		case amqpErr := <-connClosed:
+			if amqpErr != nil {
+				return apperr.Wrap(amqpErr, "rabbitmq connection closed")
+			}
+			return ErrAMQPDisconnected
+		}
+	})
+
 	chUp, err := a.conn.Channel()
 	if err != nil {
 		return apperr.Wrap(err, "rabbitmq upload channel")
@@ -93,13 +123,24 @@ func (a *App) Run(ctx context.Context) error {
 	if err != nil {
 		return apperr.Wrap(err, "consume delete")
 	}
+	a.ready.Store(true)
 
-	go a.consumeLoop(ctx, uploadMsgs, chUp, a.proc.HandleUploadDelivery, "upload", a.cfg.UploadQueue, "upload delivery")
-	go a.consumeLoop(ctx, deleteMsgs, chDel, a.proc.HandleDeleteDelivery, "delete", a.cfg.DeleteQueue, "delete delivery")
+	g.Go(func() error {
+		return a.consumeLoop(gctx, uploadMsgs, chUp, a.proc.HandleUploadDelivery, "upload", a.cfg.UploadQueue, "upload delivery")
+	})
+	g.Go(func() error {
+		return a.consumeLoop(gctx, deleteMsgs, chDel, a.proc.HandleDeleteDelivery, "delete", a.cfg.DeleteQueue, "delete delivery")
+	})
 
 	a.log.InfoContext(ctx, "worker consuming", "upload_queue", a.cfg.UploadQueue, "delete_queue", a.cfg.DeleteQueue)
-	<-ctx.Done()
-	a.log.InfoContext(ctx, "worker stopping")
+
+	if err := g.Wait(); err != nil {
+		a.log.ErrorContext(ctx, "worker stopping after amqp failure", "err", err)
+		return err
+	}
+	if ctx.Err() != nil {
+		a.log.InfoContext(ctx, "worker stopping", "err", ctx.Err())
+	}
 	return nil
 }
 
@@ -111,14 +152,14 @@ func (a *App) consumeLoop(
 	ch amqpPublisher,
 	handler deliveryHandler,
 	operation, queue, errLogKey string,
-) {
+) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case d, ok := <-deliveries:
 			if !ok {
-				return
+				return fmt.Errorf("%s consumer: %w", operation, ErrAMQPDisconnected)
 			}
 			spanCtx, endSpan := consumeContext(ctx, d, operation, queue)
 			hctx, cancel := context.WithTimeout(spanCtx, a.handleTimeout)

@@ -95,7 +95,7 @@ func run() int {
 		}
 	}()
 
-	if err := app.Run(ctx); err != nil {
+	if err := app.Run(ctx, cfg.Worker.HealthAddress); err != nil {
 		log.ErrorContext(ctx, "worker", "err", err)
 		return 1
 	}

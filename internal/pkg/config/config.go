@@ -19,11 +19,18 @@ import (
 type App struct {
 	Logging  Logging  `mapstructure:"logging"`
 	HTTP     HTTP     `mapstructure:"http"`
+	Worker   Worker   `mapstructure:"worker"`
 	Postgres Postgres `mapstructure:"postgres"`
 	S3       S3       `mapstructure:"s3"`
 	RabbitMQ RabbitMQ `mapstructure:"rabbitmq"`
 	Avatars  Avatars  `mapstructure:"avatars"`
 	OTEL     OTEL     `mapstructure:"otel"`
+}
+
+// Worker configures the background consumer process.
+type Worker struct {
+	// HealthAddress serves GET /health for probes (empty disables the listener).
+	HealthAddress string `mapstructure:"health_address"`
 }
 
 // Logging configures process-wide slog output (level only for now).
@@ -236,6 +243,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("http.cors_allow_origins", []string{"*"})
 	v.SetDefault("http.rate_limit.requests_per_second", 50)
 	v.SetDefault("http.rate_limit.burst", 100)
+
+	v.SetDefault("worker.health_address", "0.0.0.0:8081")
 
 	v.SetDefault("postgres.dsn", "postgres://govatars:govatars@localhost:5432/govatars?sslmode=disable")
 	v.SetDefault("postgres.pool_max_conns", 4)

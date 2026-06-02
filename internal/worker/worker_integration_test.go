@@ -141,7 +141,7 @@ func (s *WorkerAppSuite) SetupSuite() {
 	s.appDone = make(chan struct{})
 	go func() {
 		defer close(s.appDone)
-		if err := app.Run(appCtx); err != nil {
+		if err := app.Run(appCtx, ""); err != nil {
 			s.T().Logf("worker app run: %v", err)
 		}
 		if err := app.Close(); err != nil {
