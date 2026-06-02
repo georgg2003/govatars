@@ -10,9 +10,8 @@ import (
 	"govatars/internal/pkg/config"
 )
 
-// TODO declare topology in k8s job instead of app startup
-
 // DeclareTopology declares exchange, main queues, retry TTL queues (DLX back to main RK), and DLQs.
+// Topology may later move to a Helm hook job instead of app startup.
 func DeclareTopology(ch *amqp.Channel, cfg config.RabbitMQ) error {
 	if err := ch.ExchangeDeclare(cfg.Exchange, "direct", true, false, false, false, nil); err != nil {
 		return apperr.Wrap(err, "rabbitmq exchange")

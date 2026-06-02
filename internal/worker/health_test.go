@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func TestHandleHealth_degradedWithoutConnection(t *testing.T) {
 	a.ready.Store(true)
 
 	rr := httptest.NewRecorder()
-	a.handleHealth(rr, httptest.NewRequest(http.MethodGet, "/health", nil))
+	a.handleHealth(rr, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil))
 
 	require.Equal(t, http.StatusServiceUnavailable, rr.Code)
 	var body map[string]string

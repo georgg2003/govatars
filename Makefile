@@ -76,3 +76,20 @@ tidy:
 
 clean:
 	rm -rf $(BIN_DIR)
+
+.PHONY: build-worker-images
+build-worker-images:
+	docker build -f Dockerfile.worker -t govatars-worker:latest .
+
+.PHONY: build-server-images
+build-server-images:
+	docker build -f Dockerfile.server -t govatars-server:latest .
+
+.PHONY: build-images
+build-images:
+	make build-worker-images
+	make build-server-images
+
+.PHONY: deploy
+deploy:
+	helmfile apply --file deploy/helmfile.yaml

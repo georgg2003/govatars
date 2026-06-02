@@ -51,10 +51,10 @@ func NewApp(ctx context.Context, log *slog.Logger, proc *Processor, cfg config.R
 
 // Close closes the AMQP connection opened by [NewApp].
 func (a *App) Close() error {
-	a.ready.Store(false)
 	if a == nil || a.conn == nil {
 		return nil
 	}
+	a.ready.Store(false)
 	return a.conn.Close()
 }
 
@@ -64,11 +64,9 @@ func (a *App) Close() error {
 // Each *amqp.Channel is used from exactly one consumeLoop goroutine, so channel calls are not concurrent per channel.
 func (a *App) Run(ctx context.Context, healthAddr string) error {
 	if healthAddr != "" {
-		go func() {
-			if err := a.serveHealth(ctx, healthAddr); err != nil && ctx.Err() == nil {
-				a.log.ErrorContext(ctx, "worker health server", "err", err)
-			}
-		}()
+		if err := a.startHealth(ctx, healthAddr); err != nil {
+			return apperr.Wrap(err, "worker health listen")
+		}
 	}
 
 	connClosed := a.conn.NotifyClose(make(chan *amqp.Error, 1))

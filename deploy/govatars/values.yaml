@@ -142,11 +142,11 @@ worker:
 
   containerPort: 8081
 
+  # Liveness: port open only (readiness uses /health while AMQP consumers start).
   livenessProbe:
-    httpGet:
-      path: /health
+    tcpSocket:
       port: health
-    initialDelaySeconds: 10
+    initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 5
