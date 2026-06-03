@@ -19,11 +19,18 @@ import (
 type App struct {
 	Logging  Logging  `mapstructure:"logging"`
 	HTTP     HTTP     `mapstructure:"http"`
+	Worker   Worker   `mapstructure:"worker"`
 	Postgres Postgres `mapstructure:"postgres"`
 	S3       S3       `mapstructure:"s3"`
 	RabbitMQ RabbitMQ `mapstructure:"rabbitmq"`
 	Avatars  Avatars  `mapstructure:"avatars"`
 	OTEL     OTEL     `mapstructure:"otel"`
+}
+
+// Worker configures the background consumer process.
+type Worker struct {
+	// HealthAddress serves GET /health for probes (empty disables the listener).
+	HealthAddress string `mapstructure:"health_address"`
 }
 
 // Logging configures process-wide slog output (level only for now).
@@ -105,6 +112,12 @@ type S3 struct {
 	Region    string `mapstructure:"region"`
 }
 
+// CircuitBreakerConfig tunes reconnect circuit breaker for RabbitMQ publisher.
+type CircuitBreakerConfig struct {
+	Threshold int           `mapstructure:"threshold"`
+	Cooldown  time.Duration `mapstructure:"cooldown"`
+}
+
 // RabbitMQ topology and connection.
 type RabbitMQ struct {
 	URL                 string `mapstructure:"url"`
@@ -124,6 +137,7 @@ type RabbitMQ struct {
 	// UploadConsumerTag and DeleteConsumerTag are AMQP basic.consume consumer tags (RabbitMQ management / cancel).
 	UploadConsumerTag string `mapstructure:"upload_consumer_tag"`
 	DeleteConsumerTag string `mapstructure:"delete_consumer_tag"`
+	CircuitBreaker    CircuitBreakerConfig `mapstructure:"circuit_breaker"`
 }
 
 type OTEL struct {
@@ -230,6 +244,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("http.rate_limit.requests_per_second", 50)
 	v.SetDefault("http.rate_limit.burst", 100)
 
+	v.SetDefault("worker.health_address", "0.0.0.0:8081")
+
 	v.SetDefault("postgres.dsn", "postgres://govatars:govatars@localhost:5432/govatars?sslmode=disable")
 	v.SetDefault("postgres.pool_max_conns", 4)
 	v.SetDefault("postgres.pool_min_conns", 0)
@@ -262,6 +278,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rabbitmq.consumer_handle_timeout", "3m")
 	v.SetDefault("rabbitmq.upload_consumer_tag", "govatars-upload")
 	v.SetDefault("rabbitmq.delete_consumer_tag", "govatars-delete")
+	v.SetDefault("rabbitmq.circuit_breaker.threshold", 5)
+	v.SetDefault("rabbitmq.circuit_breaker.cooldown", "30s")
 
 	v.SetDefault("otel.enabled", false)
 	v.SetDefault("otel.resource.service_name", "govatars")

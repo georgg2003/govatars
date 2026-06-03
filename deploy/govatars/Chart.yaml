@@ -1,0 +1,5 @@
+apiVersion: v2
+name: govatars
+description: A Helm chart for govatars
+type: application
+version: 0.1.0

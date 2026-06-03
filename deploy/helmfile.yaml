@@ -1,0 +1,436 @@
+# uncomment once to add repositories
+# repositories:
+#   - name: jetstack
+#     url: https://charts.jetstack.io
+#   - name: grafana
+#     url: https://grafana.github.io/helm-charts
+#   - name: prometheus-community
+#     url: https://prometheus-community.github.io/helm-charts
+#   - name: open-telemetry
+#     url: https://open-telemetry.github.io/opentelemetry-helm-charts
+#   - name: jaegertracing
+#     url: https://jaegertracing.github.io/helm-charts
+
+helmDefaults:
+  createNamespace: true
+  wait: true
+  timeout: 600
+  historyMax: 5
+
+releases:
+  # ---------------------------------------------------------------------------
+  # cert-manager: issuing and storing TLS certificates (Secret type kubernetes.io/tls).
+  # https://cert-manager.io
+  # ---------------------------------------------------------------------------
+  - name: cert-manager
+    namespace: cert-manager
+    chart: jetstack/cert-manager
+    version: v1.17.2
+    values:
+      - crds:
+          enabled: true
+
+  # ---------------------------------------------------------------------------
+  # PKI: internal CA + Certificate for ingress (*.localhost) and services.
+  # ---------------------------------------------------------------------------
+  - name: pki
+    namespace: govatars
+    chart: ./pki
+    needs:
+      - cert-manager/cert-manager
+
+  # ---------------------------------------------------------------------------
+  # Secrets: K8s Secrets for infra and application (existingSecret / secretKeyRef).
+  # Passwords are generated on first install, preserved on upgrade (lookup + keep).
+  # ---------------------------------------------------------------------------
+  - name: secrets
+    namespace: govatars
+    chart: ./secrets
+
+  # ---------------------------------------------------------------------------
+  # Infrastructure (postgres / rabbitmq / minio)
+  # ---------------------------------------------------------------------------
+  - name: postgres
+    namespace: govatars
+    chart: oci://registry-1.docker.io/cloudpirates/postgres
+    version: 0.19.5
+    needs:
+      - govatars/secrets
+    values:
+      - fullnameOverride: postgres
+        auth:
+          username: govatars
+          database: govatars
+          existingSecret: govatars-postgres
+          secretKeys:
+            adminPasswordKey: postgres-password
+        service:
+          port: 5432
+        persistence:
+          enabled: true
+          size: 1Gi
+
+  - name: rabbitmq
+    namespace: govatars
+    chart: oci://registry-1.docker.io/cloudpirates/rabbitmq
+    version: 0.21.4
+    needs:
+      - govatars/secrets
+      - govatars/pki
+    values:
+      - fullnameOverride: rabbitmq
+        auth:
+          username: govatars
+          existingSecret: govatars-rabbitmq
+          existingPasswordKey: password
+          existingErlangCookieKey: erlang-cookie
+        service:
+          amqpPort: 5672
+          managementPort: 15672
+        persistence:
+          enabled: true
+          size: 1Gi
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: rabbitmq.localhost
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: govatars-ingress-tls
+              hosts:
+                - rabbitmq.localhost
+
+  - name: minio
+    namespace: govatars
+    chart: oci://registry-1.docker.io/cloudpirates/minio
+    version: 0.13.0
+    needs:
+      - govatars/secrets
+    values:
+      - fullnameOverride: minio
+        auth:
+          existingSecret: govatars-minio
+          existingSecretUserKey: root-user
+          existingSecretPasswordKey: root-password
+        defaultBuckets: avatars
+        service:
+          port: 9000
+          consolePort: 9090
+        persistence:
+          enabled: true
+          size: 2Gi
+
+  # ---------------------------------------------------------------------------
+  # Tracing (analog of jaeger all-in-one). Single Service "jaeger" provides OTLP
+  # (4317), and UI (16686) - as container jaeger in compose.
+  # ---------------------------------------------------------------------------
+  - name: jaeger
+    namespace: govatars
+    chart: jaegertracing/jaeger
+    needs:
+      - govatars/pki
+    values:
+      - fullnameOverride: jaeger
+        provisionDataStore:
+          cassandra: false
+          elasticsearch: false
+        storage:
+          type: memory
+        allInOne:
+          enabled: true
+        agent:
+          enabled: false
+        collector:
+          enabled: false
+        query:
+          enabled: false
+        jaeger:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - jaeger.localhost
+            pathType: Prefix
+            tls:
+              - secretName: govatars-ingress-tls
+                hosts:
+                  - jaeger.localhost
+
+  # ---------------------------------------------------------------------------
+  # Logs (loki). Single binary + file storage, Service "loki:3100".
+  # ---------------------------------------------------------------------------
+  - name: loki
+    namespace: govatars
+    chart: grafana/loki
+    values:
+      - deploymentMode: SingleBinary
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          schemaConfig:
+            configs:
+              - from: "2024-04-01"
+                store: tsdb
+                object_store: filesystem # can be changed to minio
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+          storage:
+            type: filesystem # can be changed to minio
+          limits_config:
+            metric_aggregation_enabled: true
+          pattern_ingester:
+            enabled: false
+        singleBinary:
+          replicas: 1
+          persistence:
+            enabled: true
+            size: 2Gi
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        backend:
+          replicas: 0
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+        gateway:
+          enabled: false
+        monitoring:
+          selfMonitoring:
+            enabled: false
+            grafanaAgent:
+              installOperator: false
+          serviceMonitor:
+            enabled: false
+
+  # ---------------------------------------------------------------------------
+  # Metrics (prometheus + node_exporter)
+  # ---------------------------------------------------------------------------
+  - name: prometheus
+    namespace: govatars
+    chart: prometheus-community/prometheus
+    needs:
+      - govatars/pki
+    values:
+      - server:
+          fullnameOverride: prometheus
+          service:
+            servicePort: 9090
+          persistentVolume:
+            enabled: true
+            size: 2Gi
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            hosts:
+              - prometheus.localhost
+            path: /
+            pathType: Prefix
+            tls:
+              - secretName: govatars-ingress-tls
+                hosts:
+                  - prometheus.localhost
+          global:
+            scrape_interval: 15s
+        extraScrapeConfigs: |
+          - job_name: otel-collector
+            static_configs:
+              - targets: ["otel-collector:8889"]
+        alertmanager:
+          enabled: false
+        prometheus-pushgateway:
+          enabled: false
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector (analog of otel-collector).
+  # Config repeats otel-collector-config.yaml from compose.
+  # ---------------------------------------------------------------------------
+  - name: otel-collector
+    namespace: govatars
+    chart: open-telemetry/opentelemetry-collector
+    needs:
+      - govatars/loki
+      - govatars/prometheus
+      - govatars/jaeger
+    values:
+      - fullnameOverride: otel-collector
+        mode: deployment
+        image:
+          repository: otel/opentelemetry-collector-contrib
+        command:
+          name: otelcol-contrib
+        presets:
+          logsCollection:
+            enabled: false
+          kubernetesAttributes:
+            enabled: false
+        ports:
+          prometheus:
+            enabled: true
+            containerPort: 8889
+            servicePort: 8889
+            protocol: TCP
+        config:
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                  endpoint: 0.0.0.0:4317
+          processors:
+            batch:
+              timeout: 10s
+              send_batch_size: 1024
+          exporters:
+            otlphttp/loki:
+              endpoint: http://loki:3100/otlp
+              compression: gzip
+              tls:
+                insecure: true
+            prometheus:
+              endpoint: 0.0.0.0:8889
+              resource_to_telemetry_conversion:
+                enabled: true
+            otlp/traces:
+              endpoint: jaeger:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              logs:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [otlphttp/loki]
+              metrics:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [prometheus]
+              traces:
+                receivers: [otlp]
+                processors: [batch]
+                exporters: [otlp/traces]
+
+  # ---------------------------------------------------------------------------
+  # Grafana + provisioning datasources (analog of grafana).
+  # Grafana dashboards are imported via sidecar from ConfigMaps of grafana-dashboards release.
+  # ---------------------------------------------------------------------------
+  - name: grafana
+    namespace: govatars
+    chart: grafana/grafana
+    needs:
+      - govatars/secrets
+      - govatars/pki
+      - govatars/loki
+      - govatars/prometheus
+      - govatars/jaeger
+    values:
+      - fullnameOverride: grafana
+        service:
+          port: 3000
+        admin:
+          existingSecret: govatars-grafana
+          userKey: admin-user
+          passwordKey: admin-password
+        persistence:
+          enabled: true
+          size: 1Gi
+        initChownData:
+          enabled: false
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - grafana.localhost
+          path: /
+          pathType: Prefix
+          tls:
+            - secretName: govatars-ingress-tls
+              hosts:
+                - grafana.localhost
+        grafana.ini:
+          server:
+            root_url: "https://grafana.localhost"
+        datasources:
+          datasources.yaml:
+            apiVersion: 1
+            datasources:
+              - name: Prometheus
+                uid: prometheus
+                type: prometheus
+                access: proxy
+                url: http://prometheus:9090
+                isDefault: false
+                editable: true
+                jsonData:
+                  timeInterval: 15s
+              - name: Loki
+                uid: loki
+                type: loki
+                access: proxy
+                url: http://loki:3100
+                isDefault: true
+                editable: true
+                jsonData:
+                  maxLines: 1000
+              - name: Jaeger
+                uid: jaeger
+                type: jaeger
+                access: proxy
+                url: http://jaeger:16686
+                isDefault: false
+                editable: true
+        sidecar:
+          dashboards:
+            enabled: true
+            label: grafana_dashboard
+            folderAnnotation: grafana_folder
+            provider:
+              foldersFromFilesStructure: true
+
+  # Grafana dashboards via dashboard sidecar
+  - name: grafana-dashboards
+    namespace: govatars
+    chart: ./grafana-dashboards
+
+  # ---------------------------------------------------------------------------
+  # Application: server + worker + migrations
+  # ---------------------------------------------------------------------------
+  - name: govatars
+    namespace: govatars
+    chart: ./govatars
+    needs:
+      - govatars/secrets
+      - govatars/pki
+      - govatars/postgres
+      - govatars/rabbitmq
+      - govatars/minio
+      - govatars/otel-collector
+
+  # ---------------------------------------------------------------------------
+  # Network policies: default-deny ingress + point-in-time traffic between
+  # components. Apply last, after all services are up.
+  # ---------------------------------------------------------------------------
+  - name: network-policies
+    namespace: govatars
+    chart: ./network-policies
+    needs:
+      - govatars/postgres
+      - govatars/rabbitmq
+      - govatars/minio
+      - govatars/jaeger
+      - govatars/loki
+      - govatars/prometheus
+      - govatars/otel-collector
+      - govatars/grafana
+      - govatars/govatars

@@ -16,7 +16,7 @@ http:
     burst: 100
 
 postgres:
-  dsn: "postgres://govatars:govatars@localhost:5433/govatars?sslmode=disable"
+  dsn: ""
   pool_max_conns: 4
   pool_min_conns: 0
   pool_max_conn_lifetime: "1h"
@@ -37,14 +37,14 @@ avatars:
 
 s3:
   endpoint: "localhost:9000"
-  access_key: "minioadmin"
-  secret_key: "minioadmin"
+  access_key: ""
+  secret_key: ""
   bucket: "avatars"
   use_ssl: false
   region: "us-east-1"
 
 rabbitmq:
-  url: "amqp://guest:guest@localhost:5673/"
+  url: ""
   upload_consumer_tag: "govatars-upload"
   delete_consumer_tag: "govatars-delete"
   consumer_handle_timeout: "3m"

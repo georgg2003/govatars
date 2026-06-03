@@ -1,0 +1,50 @@
+ca:
+  secretName: govatars-ca-tls
+  commonName: govatars-internal-ca
+  duration: 87600h0m0s
+
+issuers:
+  selfSigned: govatars-selfsigned
+  ca: govatars-ca
+
+certificate:
+  duration: 8760h0m0s
+  renewBefore: 720h0m0s
+
+# Ingress TLS: cert-manager creates Secret type kubernetes.io/tls,
+# Ingress references it via spec.tls[].secretName.
+ingress:
+  secretName: govatars-ingress-tls
+  hosts:
+    - govatars.localhost
+    - grafana.localhost
+    - prometheus.localhost
+    - jaeger.localhost
+    - rabbitmq.localhost
+
+# Server certificates for in-cluster services (OTLP, postgres, etc.).
+services:
+  - name: postgres
+    dnsNames:
+      - postgres
+      - postgres.govatars
+      - postgres.govatars.svc
+      - postgres.govatars.svc.cluster.local
+  - name: otel-collector
+    dnsNames:
+      - otel-collector
+      - otel-collector.govatars
+      - otel-collector.govatars.svc
+      - otel-collector.govatars.svc.cluster.local
+  - name: loki
+    dnsNames:
+      - loki
+      - loki.govatars
+      - loki.govatars.svc
+      - loki.govatars.svc.cluster.local
+  - name: jaeger
+    dnsNames:
+      - jaeger
+      - jaeger.govatars
+      - jaeger.govatars.svc
+      - jaeger.govatars.svc.cluster.local

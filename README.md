@@ -77,6 +77,144 @@ go generate ./...
 
 Other **Makefile** targets: `build`, `test`, `install-lint` (installs **golangci-lint** into `**$(go env GOPATH)/bin`**), `lint` (runs that binary by full path — **no `PATH` setup required**), `generate` (OpenAPI codegen), `deps-down`, `migrate-down`.
 
+## Local development in Kubernetes
+
+The full stack (Postgres, MinIO, RabbitMQ, observability, API + worker) can be deployed with **[Helmfile](https://github.com/helmfile/helmfile)** from [`deploy/helmfile.yaml`](deploy/helmfile.yaml). This mirrors `docker-compose.yaml` but runs inside a local cluster (tested with **Rancher Desktop** + built-in **Traefik** ingress).
+
+### Prerequisites
+
+- A running Kubernetes cluster (`kubectl cluster-info` succeeds).
+- **Docker** (or the container runtime your cluster uses) to build `govatars-server` / `govatars-worker` images.
+- **Helm 3** and **Helmfile**.
+
+### Install Helmfile
+
+**macOS (Homebrew):**
+
+```bash
+brew install helm helmfile
+```
+
+**Linux / manual install:** see [Helmfile releases](https://github.com/helmfile/helmfile/releases) and [Helm install docs](https://helm.sh/docs/intro/install/).
+
+Helmfile uses the **helm-diff** plugin for `apply`. Install it once:
+
+```bash
+helm plugin install https://github.com/databus23/helm-diff
+```
+
+### One-time: Helm chart repositories
+
+External charts (Grafana, Prometheus, OpenTelemetry, Jaeger) are listed in the commented `repositories:` block at the top of [`deploy/helmfile.yaml`](deploy/helmfile.yaml). Either uncomment that block, or add repos manually:
+
+```bash
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
+helm repo update
+```
+
+### Build application images
+
+The Helm chart expects local tags `govatars-server:latest` and `govatars-worker:latest` (see [`deploy/govatars/values.yaml`](deploy/govatars/values.yaml)).
+
+From the repository root:
+
+```bash
+docker build -f Dockerfile.server -t govatars-server:latest .
+docker build -f Dockerfile.worker -t govatars-worker:latest .
+```
+
+**Rancher Desktop:** build images with the **Rancher Desktop** Docker context (`docker context use rancher-desktop`), not Docker Desktop — otherwise the cluster will not see the images (`ImagePullBackOff`). If you already built elsewhere:
+
+```bash
+docker save govatars-server:latest govatars-worker:latest | docker --context rancher-desktop load
+```
+
+### Deploy the stack
+
+```bash
+cd deploy
+helmfile apply
+```
+
+Release order is handled by `needs:` dependencies: **secrets** → infra → observability → **govatars** → **network-policies**.
+
+First run takes several minutes (chart downloads, PVC provisioning, migration Job).
+
+Check status:
+
+```bash
+kubectl get pods -n govatars
+helmfile -l name=govatars status
+```
+
+### Credentials (K8s Secrets)
+
+Passwords are **not** stored in git. The local chart [`deploy/secrets`](deploy/secrets) creates:
+
+| Secret | Used by |
+|--------|---------|
+| `govatars-postgres` | Postgres |
+| `govatars-rabbitmq` | RabbitMQ |
+| `govatars-minio` | MinIO |
+| `govatars-grafana` | Grafana admin |
+| `govatars-app` | server / worker (DSN, RabbitMQ URL, S3 keys) |
+
+On first install passwords are generated randomly; on upgrade existing values are kept (`lookup` + `helm.sh/resource-policy: keep`).
+
+Example — Grafana admin password:
+
+```bash
+kubectl get secret govatars-grafana -n govatars \
+  -o jsonpath='{.data.admin-password}' | base64 -d; echo
+```
+
+DB migrations run automatically as a Helm pre-upgrade hook (`govatars-migrate` Job).
+
+### Ingress URLs
+
+Traefik routes `*.localhost` to services (add hosts to `/etc/hosts` only if your environment does not resolve them automatically):
+
+| URL | Service |
+|-----|---------|
+| http://govatars.localhost | API + `/web` UI |
+| http://grafana.localhost | Grafana (dashboards from `deploy/grafana-dashboards`) |
+| http://prometheus.localhost | Prometheus |
+| http://jaeger.localhost | Jaeger UI |
+| http://rabbitmq.localhost | RabbitMQ management |
+
+### Day-to-day workflow
+
+**After Go code changes** — rebuild images and roll out the app:
+
+```bash
+docker build -f Dockerfile.server -t govatars-server:latest .
+docker build -f Dockerfile.worker -t govatars-worker:latest .
+cd deploy && helmfile -l name=govatars apply
+```
+
+**After Helm/value changes** in `deploy/`:
+
+```bash
+cd deploy && helmfile apply
+```
+
+**Deploy or tear down a single release:**
+
+```bash
+cd deploy
+helmfile -l name=grafana apply
+helmfile -l name=grafana destroy
+```
+
+**Render manifests without applying:**
+
+```bash
+cd deploy && helmfile template
+```
+   
 ## License
 
 See [LICENSE](LICENSE).

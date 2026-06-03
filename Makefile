@@ -16,7 +16,7 @@ GOLANGCI_LINT_VER ?= v2.11.4
 GOPATH_BIN := $(shell $(GO) env GOPATH)/bin
 GOLANGCI_LINT := $(GOPATH_BIN)/golangci-lint
 
-.PHONY: all build run-server run-worker deps-up deps-down migrate-up migrate-down install-lint lint test test-integration test-coverage test-coverage-integration test-coverage-full generate tidy clean
+.PHONY: all build dbuild run-server run-worker deps-up deps-down migrate-up migrate-down install-lint lint test test-integration test-coverage test-coverage-integration test-coverage-full generate tidy clean
 
 all: build
 
@@ -31,7 +31,7 @@ run-server:
 run-worker:
 	$(GO) run ./cmd/worker
 
-make dbuild:
+dbuild:
 	docker compose build
 
 up:
@@ -76,3 +76,20 @@ tidy:
 
 clean:
 	rm -rf $(BIN_DIR)
+
+.PHONY: build-worker-images
+build-worker-images:
+	docker build -f Dockerfile.worker -t govatars-worker:latest .
+
+.PHONY: build-server-images
+build-server-images:
+	docker build -f Dockerfile.server -t govatars-server:latest .
+
+.PHONY: build-images
+build-images:
+	make build-worker-images
+	make build-server-images
+
+.PHONY: deploy
+deploy:
+	helmfile apply --file deploy/helmfile.yaml

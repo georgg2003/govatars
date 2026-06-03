@@ -10,6 +10,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"govatars/internal/pkg/apperr"
+	"govatars/internal/pkg/circuitbreaker"
 	"govatars/internal/pkg/config"
 	"govatars/internal/usecase"
 )
@@ -23,6 +24,7 @@ type Publisher struct {
 	ch   *amqp.Channel
 	cfg  config.RabbitMQ
 	log  *slog.Logger
+	cb   *circuitbreaker.CircuitBreaker
 }
 
 // NewPublisher connects, declares topology, and returns a publisher. Caller must Close().
@@ -33,41 +35,95 @@ func NewPublisher(ctx context.Context, log *slog.Logger, cfg config.RabbitMQ) (*
 	if cfg.URL == "" {
 		return nil, errors.New("rabbitmq: empty url")
 	}
-	conn, err := amqp.Dial(cfg.URL)
-	if err != nil {
-		return nil, apperr.Wrap(err, "rabbitmq dial")
+	p := &Publisher{
+		cfg: cfg,
+		log: log,
+		cb: circuitbreaker.New(circuitbreaker.Config{
+			Threshold: cfg.CircuitBreaker.Threshold,
+			Cooldown:  cfg.CircuitBreaker.Cooldown,
+		}),
 	}
-	ch, err := conn.Channel()
-	if err != nil {
-		if cerr := conn.Close(); cerr != nil {
-			log.WarnContext(ctx, "rabbitmq close conn after channel open failure", "err", cerr)
-		}
-		return nil, apperr.Wrap(err, "rabbitmq channel")
-	}
-	if err := DeclareTopology(ch, cfg); err != nil {
-		if cerr := ch.Close(); cerr != nil {
-			log.WarnContext(ctx, "rabbitmq close channel after topology failure", "err", cerr)
-		}
-		if cerr := conn.Close(); cerr != nil {
-			log.WarnContext(ctx, "rabbitmq close conn after topology failure", "err", cerr)
-		}
+	if err := p.connect(ctx); err != nil {
 		return nil, err
 	}
-	return &Publisher{conn: conn, ch: ch, cfg: cfg, log: log}, nil
+	return p, nil
+}
+
+func (p *Publisher) connect(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return p.cb.Execute(func() error {
+		conn, err := DialContext(ctx, p.cfg.URL)
+		if err != nil {
+			return err
+		}
+		ch, err := conn.Channel()
+		if err != nil {
+			if cerr := conn.Close(); cerr != nil {
+				p.log.WarnContext(ctx, "rabbitmq close conn after channel open failure", "err", cerr)
+			}
+			return apperr.Wrap(err, "rabbitmq channel")
+		}
+		if err := ctx.Err(); err != nil {
+			p.closeConnCh(ctx, conn, ch)
+			return err
+		}
+		if err := DeclareTopology(ch, p.cfg); err != nil {
+			p.closeConnCh(ctx, conn, ch)
+			return err
+		}
+		p.conn = conn
+		p.ch = ch
+		return nil
+	})
+}
+
+func (p *Publisher) closeConnCh(ctx context.Context, conn *amqp.Connection, ch *amqp.Channel) {
+	if ch != nil {
+		if cerr := ch.Close(); cerr != nil {
+			p.log.WarnContext(ctx, "rabbitmq close channel", "err", cerr)
+		}
+	}
+	if conn != nil {
+		if cerr := conn.Close(); cerr != nil {
+			p.log.WarnContext(ctx, "rabbitmq close conn", "err", cerr)
+		}
+	}
+}
+
+func (p *Publisher) closeLocked(ctx context.Context) {
+	if p.ch != nil {
+		if err := p.ch.Close(); err != nil {
+			p.log.WarnContext(ctx, "rabbitmq channel close", "err", err)
+		}
+		p.ch = nil
+	}
+	if p.conn != nil {
+		if err := p.conn.Close(); err != nil {
+			p.log.WarnContext(ctx, "rabbitmq conn close", "err", err)
+		}
+		p.conn = nil
+	}
+}
+
+// reconnectIfNeeded re-establishes the AMQP session when the broker restarted or TCP dropped.
+func (p *Publisher) reconnectIfNeeded(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if p.conn != nil && !p.conn.IsClosed() && p.ch != nil && !p.ch.IsClosed() {
+		return nil
+	}
+	p.closeLocked(ctx)
+	return p.connect(ctx)
 }
 
 // Close releases the channel and connection.
 func (p *Publisher) Close(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.ch != nil {
-		if err := p.ch.Close(); err != nil {
-			p.log.WarnContext(ctx, "rabbitmq channel close", "err", err)
-		}
-	}
-	if p.conn != nil {
-		return p.conn.Close()
-	}
+	p.closeLocked(ctx)
 	return nil
 }
 
@@ -78,11 +134,8 @@ func (p *Publisher) Health(ctx context.Context) error {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.conn == nil || p.conn.IsClosed() {
-		return errors.New("rabbitmq: connection closed")
-	}
-	if p.ch == nil || p.ch.IsClosed() {
-		return errors.New("rabbitmq: channel closed")
+	if err := p.reconnectIfNeeded(ctx); err != nil {
+		return err
 	}
 	if p.cfg.UploadQueue == "" {
 		return errors.New("rabbitmq: empty upload queue name")
@@ -96,6 +149,9 @@ func (p *Publisher) Health(ctx context.Context) error {
 
 // PublishJSON sends a persistent JSON message with optional AMQP message id (idempotency hint).
 func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageID string, body any) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err
@@ -110,6 +166,9 @@ func (p *Publisher) PublishJSON(ctx context.Context, routingKey string, messageI
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.reconnectIfNeeded(ctx); err != nil {
+		return err
+	}
 	return PublishWithContext(ctx, p.ch, p.cfg.Exchange, routingKey, pub)
 }
 

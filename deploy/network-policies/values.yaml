@@ -1,0 +1,5 @@
+enabled: true
+
+# Namespace, where ingress controller lives (in k3s Traefik in kube-system).
+# Used to allow incoming traffic to UI services through Ingress.
+ingressControllerNamespace: kube-system

@@ -1,0 +1,43 @@
+{{- range .Values.services }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .name }}-tls
+  namespace: {{ $.Release.Namespace }}
+spec:
+  secretName: {{ .name }}-tls
+  duration: {{ $.Values.certificate.duration }}
+  renewBefore: {{ $.Values.certificate.renewBefore }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: {{ $.Values.issuers.ca }}
+    kind: Issuer
+    group: cert-manager.io
+  dnsNames:
+    {{- range .dnsNames }}
+    - {{ . | quote }}
+    {{- end }}
+---
+{{- end }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.ingress.secretName }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: {{ .Values.ingress.secretName }}
+  duration: {{ .Values.certificate.duration }}
+  renewBefore: {{ .Values.certificate.renewBefore }}
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: {{ .Values.issuers.ca }}
+    kind: Issuer
+    group: cert-manager.io
+  dnsNames:
+    {{- range .Values.ingress.hosts }}
+    - {{ . | quote }}
+    {{- end }}
