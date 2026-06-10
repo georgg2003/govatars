@@ -1,7 +1,5 @@
 # Govatars (GophProfile)
 
-Go module: `**govatars**`.
-
 **Govatars** is a Go microservice for managing user avatars: upload once, store processed images, and serve them over HTTP. Third-party apps can resolve an avatar by user identifier; if none exists, a default placeholder may be returned (planned for later milestones).
 
 This repository implements the **MVP** of the **GophProfile** course project: REST API, PostgreSQL metadata, S3-compatible object storage (MinIO), asynchronous image processing via **RabbitMQ**, and a bundled web UI (upload and gallery under `/web`).
